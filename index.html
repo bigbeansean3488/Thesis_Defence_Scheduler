@@ -725,9 +725,11 @@ pre {
           </div>
         </div>
         <div class="flex gap-2 mt-2 wrap">
-          <button class="btn btn-primary" onclick="saveGasUrl()">💾 儲存並測試</button>
+          <button class="btn btn-primary" onclick="saveGasUrl()">💾 儲存、測試並同步本機資料</button>
           <button class="btn btn-gold"    onclick="initGasSheets()">🏗️ 初始化試算表</button>
+          <button class="btn btn-teal"    onclick="forceSyncToGas(this)">☁️ 強制同步目前資料</button>
         </div>
+        <p class="text-muted mt-2" style="font-size:.78rem">若你已經在本機填過資料，設定 URL 後系統會先初始化試算表，再把目前瀏覽器中的資料推送到 Google Sheet。</p>
       </div>
       <div class="card">
         <div class="card-title">📋 Apps Script 程式碼</div>
@@ -832,6 +834,13 @@ pre {
 
     <!-- Export -->
     <div id="adm-export" class="adm-panel">
+      <div class="card">
+        <div class="card-title">☁️ Google Sheet 同步</div>
+        <div class="notice n-info" style="font-size:.84rem">
+          如果 Google Sheet 是空的，但瀏覽器已有填寫資料，請按下方按鈕強制同步。同步完成後，到你的 Google Sheet 就能看到所有資料。
+        </div>
+        <button class="btn btn-gold" id="force-sync-btn" onclick="forceSyncToGas(this)">☁️ 強制同步到 Google Sheet</button>
+      </div>
       <div class="card">
         <div class="card-title">📤 匯出與管理</div>
         <div style="display:flex;flex-direction:column;gap:12px;max-width:280px">
@@ -968,7 +977,7 @@ const STATE = {
 };
 
 function stateInit() {
-  STATE.gasUrl   = localStorage.getItem('gasUrl')   || '';
+  STATE.gasUrl   = normalizeGasUrl(localStorage.getItem('gasUrl') || '');
   STATE.adminPin = localStorage.getItem('adminPin') || '1234';
 
   const extraTeachers = JSON.parse(localStorage.getItem('extraTeachers') || '[]');
@@ -991,10 +1000,16 @@ function saveLocal() {
 // ── Student data ────────────────────────────────────────
 function getStuData(name) { return STATE.stuData[name] || null; }
 
-function setStuData(name, data) {
-  STATE.stuData[name] = data;
+function stampData(data) {
+  return { ...data, updatedAt: new Date().toISOString() };
+}
+
+async function setStuData(name, data) {
+  const stamped = stampData(data);
+  STATE.stuData[name] = stamped;
   saveLocal();
-  if (STATE.gasUrl) gasCall('saveStuData', { name, payload: JSON.stringify(data) });
+  if (!STATE.gasUrl) return { ok: true, mode: 'local' };
+  return await gasCall('saveStuData', { name, payload: JSON.stringify(stamped) });
 }
 
 // ── Shared teacher availability ─────────────────────────
@@ -1004,7 +1019,7 @@ function getTeacherAvail(teacher) {
 }
 
 // Diff old vs new slots, update shared table, write log entries
-function updateTeacherAvail(studentName, teacher, newSlots) {
+async function updateTeacherAvail(studentName, teacher, newSlots) {
   const oldSlots = new Set(getTeacherAvail(teacher));
   const newSet   = new Set(newSlots);
   const now = new Date().toISOString();
@@ -1020,41 +1035,110 @@ function updateTeacherAvail(studentName, teacher, newSlots) {
   };
 
   // Append log entries
-  if (added.length)   STATE.editLog.push({ ts: now, student: studentName, teacher, action: 'add',    slots: added });
-  if (removed.length) STATE.editLog.push({ ts: now, student: studentName, teacher, action: 'remove', slots: removed });
+  const logEntries = [
+    added.length   ? { ts: now, student: studentName, teacher, action: 'add',    slots: added }   : null,
+    removed.length ? { ts: now, student: studentName, teacher, action: 'remove', slots: removed } : null,
+  ].filter(Boolean);
 
+  STATE.editLog.push(...logEntries);
   saveLocal();
-  if (STATE.gasUrl) {
-    gasCall('saveTeacherAvail', { teacher, payload: JSON.stringify(STATE.teacherAvail[teacher]) });
-    if (added.length || removed.length) {
-      gasCall('appendLog', { payload: JSON.stringify(
-        [added.length   ? { ts: now, student: studentName, teacher, action: 'add',    slots: added }   : null,
-         removed.length ? { ts: now, student: studentName, teacher, action: 'remove', slots: removed } : null]
-        .filter(Boolean)
-      )});
-    }
+
+  if (!STATE.gasUrl) return { ok: true, mode: 'local' };
+
+  const r1 = await gasCall('saveTeacherAvail', { teacher, payload: JSON.stringify(STATE.teacherAvail[teacher]) });
+  let r2 = { ok: true };
+  if (logEntries.length) {
+    r2 = await gasCall('appendLog', { payload: JSON.stringify(logEntries) });
   }
+  return (r1?.ok !== false && r2?.ok !== false)
+    ? { ok: true }
+    : { ok: false, msg: r1?.msg || r2?.msg || '老師時段同步失敗' };
 }
 
 // Batch update all teachers from a save operation
-function syncAvailabilityFromForm(studentName, availabilityObj) {
-  Object.entries(availabilityObj).forEach(([teacher, data]) => {
-    updateTeacherAvail(studentName, teacher, data.slots || []);
-  });
+async function syncAvailabilityFromForm(studentName, availabilityObj) {
+  const results = [];
+  for (const [teacher, data] of Object.entries(availabilityObj)) {
+    results.push(await updateTeacherAvail(studentName, teacher, data.slots || []));
+  }
+  return results.every(r => r?.ok !== false) ? { ok: true } : { ok: false, msg: '部分老師時段同步失敗' };
 }
 
 // ── GAS ────────────────────────────────────────────────
+const GAS_POST_ACTIONS = new Set(['saveStuData', 'saveTeacherAvail', 'appendLog']);
+let gasJsonpSeq = 0;
+
+function normalizeGasUrl(url) {
+  return String(url || '').trim().replace(/\/dev(\?.*)?$/, '/exec');
+}
+
+function buildQuery(action, params = {}, includeCallback = false, callbackName = '') {
+  const qs = new URLSearchParams({ action });
+  if (includeCallback) qs.set('callback', callbackName);
+  Object.entries(params).forEach(([k, v]) =>
+    qs.set(k, typeof v === 'object' ? JSON.stringify(v) : String(v))
+  );
+  return qs;
+}
+
+function gasJsonp(action, params = {}, timeoutMs = 15000) {
+  return new Promise((resolve, reject) => {
+    const callbackName = `__gas_jsonp_${Date.now()}_${gasJsonpSeq++}`;
+    const qs = buildQuery(action, params, true, callbackName);
+    const script = document.createElement('script');
+    const sep = STATE.gasUrl.includes('?') ? '&' : '?';
+    let done = false;
+
+    const cleanup = () => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      try { delete window[callbackName]; } catch(e) { window[callbackName] = undefined; }
+      script.remove();
+    };
+
+    const timer = setTimeout(() => {
+      cleanup();
+      reject(new Error('Apps Script 讀取逾時。請確認部署權限為「所有人」且網址是 /exec。'));
+    }, timeoutMs);
+
+    window[callbackName] = data => {
+      cleanup();
+      resolve(data);
+    };
+    script.onerror = () => {
+      cleanup();
+      reject(new Error('Apps Script 讀取失敗。常見原因：未部署為網路應用程式、權限不是所有人、或 URL 貼錯。'));
+    };
+    script.src = STATE.gasUrl + sep + qs.toString();
+    document.head.appendChild(script);
+  });
+}
+
+async function gasPost(action, params = {}) {
+  const body = buildQuery(action, params, false);
+  await fetch(STATE.gasUrl, {
+    method: 'POST',
+    mode: 'no-cors',
+    body,
+  });
+  // no-cors response is opaque; use read-back verification in forceSyncToGas().
+  return { ok: true, mode: 'posted' };
+}
+
 async function gasCall(action, params = {}) {
   if (!STATE.gasUrl) return localGasFallback(action, params);
+
   try {
-    const qs = new URLSearchParams({ action });
-    Object.entries(params).forEach(([k, v]) =>
-      qs.set(k, typeof v === 'object' ? JSON.stringify(v) : String(v))
-    );
-    const res = await fetch(STATE.gasUrl + '?' + qs.toString());
-    return await res.json();
+    const paramSize = buildQuery(action, params, false).toString().length;
+    const mustPost = GAS_POST_ACTIONS.has(action) || paramSize > 1500;
+    const r = mustPost ? await gasPost(action, params) : await gasJsonp(action, params);
+    if (r?.ok === false) throw new Error(r.msg || 'Apps Script 回傳失敗');
+    return r || { ok: true };
   } catch (e) {
-    return localGasFallback(action, params);
+    console.error('[GAS sync failed]', action, e);
+    setSyncIndicator(false);
+    return { ok: false, msg: e.message || String(e), error: true };
   }
 }
 
@@ -1084,185 +1168,368 @@ function localGasFallback(action, p) {
     case 'clearLog':
       STATE.editLog = []; saveLocal(); return { ok: true };
 
+    case 'getTeachers': return { data: JSON.parse(localStorage.getItem('extraTeachers') || '[]') };
+    case 'getStudents': return { data: JSON.parse(localStorage.getItem('extraStudents') || '[]') };
+
     case 'addTeacher': {
-      const extras = JSON.parse(localStorage.getItem('extraTeachers') || '[]');
-      if (!extras.find(t => t.name === p.name)) {
-        extras.push({ name: p.name, dept: p.dept || '' });
-        localStorage.setItem('extraTeachers', JSON.stringify(extras));
-        STATE.teachers.push({ name: p.name, dept: p.dept || '' });
-      }
+      addLocalTeacher({ name: p.name, dept: p.dept || '' });
+      return { ok: true };
+    }
+    case 'deleteTeacher': {
+      removeLocalTeacher(p.name);
       return { ok: true };
     }
     case 'addStudent': {
-      const extras = JSON.parse(localStorage.getItem('extraStudents') || '[]');
-      if (!extras.find(s => s.name === p.name)) {
-        const stu = { name:p.name, id:p.id||'', advisor:p.advisor||'',
-          c1:p.c1||'', c2:p.c2||'', c3:p.c3||'', c4:p.c4||'', alt:[] };
-        extras.push(stu);
-        localStorage.setItem('extraStudents', JSON.stringify(extras));
-        STATE.students.push(stu);
-      }
+      addLocalStudent({ name:p.name, id:p.id||'', advisor:p.advisor||'',
+        c1:p.c1||'', c2:p.c2||'', c3:p.c3||'', c4:p.c4||'', alt:[] });
       return { ok: true };
     }
     case 'deleteStudent': {
-      const extras = JSON.parse(localStorage.getItem('extraStudents') || '[]');
-      localStorage.setItem('extraStudents', JSON.stringify(extras.filter(s => s.name !== p.name)));
-      STATE.students = STATE.students.filter(s => s.name !== p.name);
+      removeLocalStudent(p.name);
       return { ok: true };
     }
     case 'clearAll':
       STATE.stuData = {}; STATE.teacherAvail = {}; STATE.editLog = [];
       saveLocal(); return { ok: true };
 
-    default: return { ok: false };
+    default: return { ok: false, msg: 'unknown local action' };
   }
 }
 
-async function loadAllFromGas() {
-  const [sd, td, ld] = await Promise.all([
+function addLocalTeacher(t) {
+  if (!t?.name) return;
+  const extras = JSON.parse(localStorage.getItem('extraTeachers') || '[]');
+  if (!TEACHERS.find(x => x.name === t.name) && !extras.find(x => x.name === t.name)) {
+    extras.push({ name: t.name, dept: t.dept || '' });
+    localStorage.setItem('extraTeachers', JSON.stringify(extras));
+  }
+  if (!STATE.teachers.find(x => x.name === t.name)) STATE.teachers.push({ name: t.name, dept: t.dept || '' });
+}
+
+function removeLocalTeacher(name) {
+  const extras = JSON.parse(localStorage.getItem('extraTeachers') || '[]').filter(t => t.name !== name);
+  localStorage.setItem('extraTeachers', JSON.stringify(extras));
+  STATE.teachers = STATE.teachers.filter(t => t.name !== name);
+}
+
+function addLocalStudent(s) {
+  if (!s?.name) return;
+  const stu = { name:s.name, id:s.id||'', advisor:s.advisor||'',
+    c1:s.c1||'', c2:s.c2||'', c3:s.c3||'', c4:s.c4||'', alt:s.alt||[] };
+  const extras = JSON.parse(localStorage.getItem('extraStudents') || '[]');
+  if (!STUDENTS.find(x => x.name === stu.name) && !extras.find(x => x.name === stu.name)) {
+    extras.push(stu);
+    localStorage.setItem('extraStudents', JSON.stringify(extras));
+  }
+  if (!STATE.students.find(x => x.name === stu.name)) STATE.students.push(stu);
+}
+
+function removeLocalStudent(name) {
+  const extras = JSON.parse(localStorage.getItem('extraStudents') || '[]').filter(s => s.name !== name);
+  localStorage.setItem('extraStudents', JSON.stringify(extras));
+  STATE.students = STATE.students.filter(s => s.name !== name);
+}
+
+function mergeRemoteLists(remoteTeachers = [], remoteStudents = []) {
+  remoteTeachers.forEach(t => addLocalTeacher({ name: t.name, dept: t.dept || '' }));
+  remoteStudents.forEach(s => addLocalStudent(s));
+}
+
+function hasLocalSyncData() {
+  return Object.keys(STATE.stuData).length > 0 ||
+         Object.keys(STATE.teacherAvail).length > 0 ||
+         STATE.editLog.length > 0 ||
+         JSON.parse(localStorage.getItem('extraStudents') || '[]').length > 0 ||
+         JSON.parse(localStorage.getItem('extraTeachers') || '[]').length > 0;
+}
+
+function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
+
+async function fetchAllFromGas() {
+  const [sd, td, ld, ts, ss] = await Promise.all([
     gasCall('getAllStuData'),
     gasCall('getTeacherAvail'),
     gasCall('getEditLog'),
+    gasCall('getTeachers'),
+    gasCall('getStudents'),
   ]);
-  if (sd?.data) STATE.stuData      = { ...STATE.stuData, ...sd.data };
-  if (td?.data) STATE.teacherAvail = { ...STATE.teacherAvail, ...td.data };
-  if (ld?.data && Array.isArray(ld.data)) STATE.editLog = ld.data;
+  if ([sd, td, ld, ts, ss].some(r => r?.ok === false)) {
+    const bad = [sd, td, ld, ts, ss].find(r => r?.ok === false);
+    throw new Error(bad?.msg || '讀取 Google Sheet 失敗');
+  }
+  return {
+    stuData: sd?.data || {},
+    teacherAvail: td?.data || {},
+    editLog: Array.isArray(ld?.data) ? ld.data : [],
+    teachers: Array.isArray(ts?.data) ? ts.data : [],
+    students: Array.isArray(ss?.data) ? ss.data : [],
+  };
+}
+
+async function loadAllFromGas() {
+  const remote = await fetchAllFromGas();
+  // Remote data should be visible on new devices, but do not erase local-only keys.
+  STATE.stuData      = { ...remote.stuData, ...STATE.stuData };
+  STATE.teacherAvail = { ...remote.teacherAvail, ...STATE.teacherAvail };
+  if (remote.editLog.length > STATE.editLog.length) STATE.editLog = remote.editLog;
+  mergeRemoteLists(remote.teachers, remote.students);
   saveLocal();
+  return remote;
+}
+
+async function pushAllLocalToGas() {
+  if (!STATE.gasUrl) return { ok: false, msg: '請先設定 Apps Script URL' };
+
+  const init = await gasCall('init');
+  if (init?.ok === false) return init;
+
+  for (const [name, data] of Object.entries(STATE.stuData)) {
+    const r = await gasCall('saveStuData', { name, payload: JSON.stringify(data) });
+    if (r?.ok === false) return r;
+  }
+  for (const [teacher, data] of Object.entries(STATE.teacherAvail)) {
+    const r = await gasCall('saveTeacherAvail', { teacher, payload: JSON.stringify(data) });
+    if (r?.ok === false) return r;
+  }
+
+  const extraTeachers = JSON.parse(localStorage.getItem('extraTeachers') || '[]');
+  const extraStudents = JSON.parse(localStorage.getItem('extraStudents') || '[]');
+  for (const t of extraTeachers) {
+    const r = await gasCall('addTeacher', { name: t.name, dept: t.dept || '' });
+    if (r?.ok === false) return r;
+  }
+  for (const s of extraStudents) {
+    const r = await gasCall('addStudent', s);
+    if (r?.ok === false) return r;
+  }
+
+  if (STATE.editLog.length > 0) {
+    const r = await gasCall('appendLog', { payload: JSON.stringify(STATE.editLog) });
+    if (r?.ok === false) return r;
+  }
+
+  // Give Apps Script a moment to finish no-cors POST writes, then read back via JSONP.
+  await sleep(900);
+  const remote = await fetchAllFromGas();
+
+  const missingStu = Object.keys(STATE.stuData).filter(name => !remote.stuData[name]);
+  const missingAvail = Object.keys(STATE.teacherAvail).filter(name => !remote.teacherAvail[name]);
+
+  if (missingStu.length || missingAvail.length) {
+    return {
+      ok: false,
+      msg: `已送出，但回讀驗證不完整：缺學生 ${missingStu.length} 筆、老師時段 ${missingAvail.length} 筆。請確認 Apps Script 部署權限。`
+    };
+  }
+
+  mergeRemoteLists(remote.teachers, remote.students);
+  return { ok: true, remote };
 }
 
 // ── GAS Script ─────────────────────────────────────────
 function GAS_SCRIPT() { return `// 口試排程系統 - Google Apps Script
-// 部署：擴充功能 → Apps Script → 新增部署 → 網路應用程式
+// 部署：Google Sheet → 擴充功能 → Apps Script → 新增部署 → 網路應用程式
 // 執行身分：我的帳戶　　存取：所有人
-
-const SS = SpreadsheetApp.getActiveSpreadsheet();
+// 若這不是從 Google Sheet 內建立的 Apps Script，請填入你的試算表 ID。
+const SPREADSHEET_ID = '';
 
 function doGet(e) {
-  const action = e.parameter.action;
-  let result;
-  try {
-    switch(action) {
-      case 'ping':            result = {ok:true}; break;
-      case 'init':            result = initSheets(); break;
-      case 'getAllStuData':   result = {data: getSheetJSON('學生填寫資料')}; break;
-      case 'saveStuData':     result = upsertRow('學生填寫資料', e.parameter.name, e.parameter.payload); break;
-      case 'getTeacherAvail': result = {data: getSheetJSON('老師共享時段')}; break;
-      case 'saveTeacherAvail':result = upsertRow('老師共享時段', e.parameter.teacher, e.parameter.payload); break;
-      case 'getEditLog':      result = {data: getLogRows()}; break;
-      case 'appendLog':       result = appendLogRows(e.parameter.payload); break;
-      case 'clearLog':        result = clearSheet('編輯紀錄'); break;
-      case 'addTeacher':      result = appendUniqueRow('老師名單',[e.parameter.name,e.parameter.dept||'']); break;
-      case 'addStudent':      result = addStudent(e.parameter); break;
-      case 'deleteStudent':   result = delRow('學生名單', e.parameter.name); break;
-      case 'clearAll':        result = clearAll(); break;
-      default:                result = {ok:false, msg:'unknown action'};
-    }
-  } catch(err) { result = {ok:false, msg:err.toString()}; }
-  return ContentService.createTextOutput(JSON.stringify(result))
-    .setMimeType(ContentService.MimeType.JSON);
+  return route_(e, true);
 }
 
-function initSheets() {
-  ensureSheet('學生填寫資料', ['索引鍵','資料JSON','最後更新']);
-  ensureSheet('老師共享時段', ['索引鍵','資料JSON','最後更新']);
-  ensureSheet('編輯紀錄',    ['時間','學生','老師','動作','時段']);
-  ensureSheet('老師名單',    ['姓名','單位']);
-  ensureSheet('學生名單',    ['姓名','學號','指導教授','口委1','口委2','口委3','口委4']);
+function doPost(e) {
+  return route_(e, false);
+}
+
+function route_(e, allowJsonp) {
+  const p = e && e.parameter ? e.parameter : {};
+  let result;
+  try {
+    result = handleAction_(p.action, p);
+  } catch (err) {
+    result = { ok:false, msg: String(err && err.stack ? err.stack : err) };
+  }
+  return output_(result, allowJsonp ? p.callback : '');
+}
+
+function output_(obj, callback) {
+  const json = JSON.stringify(obj || {ok:true});
+  if (callback) {
+    // Front-end JSONP callback names look like __gas_jsonp_...; reject unsafe names.
+    if (!/^[A-Za-z_$][0-9A-Za-z_$]*(\.[A-Za-z_$][0-9A-Za-z_$]*)*$/.test(callback)) {
+      return ContentService.createTextOutput(JSON.stringify({ok:false,msg:'invalid callback'}))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+    return ContentService.createTextOutput(callback + '(' + json + ');')
+      .setMimeType(ContentService.MimeType.JAVASCRIPT);
+  }
+  return ContentService.createTextOutput(json).setMimeType(ContentService.MimeType.JSON);
+}
+
+function handleAction_(action, p) {
+  switch(action) {
+    case 'ping':             return {ok:true, ts:new Date().toISOString()};
+    case 'init':             return initSheets_();
+    case 'getAllStuData':    return {ok:true, data:getSheetJSON_('學生填寫資料')};
+    case 'saveStuData':      return upsertRow_('學生填寫資料', p.name, p.payload);
+    case 'getTeacherAvail':  return {ok:true, data:getSheetJSON_('老師共享時段')};
+    case 'saveTeacherAvail': return upsertRow_('老師共享時段', p.teacher, p.payload);
+    case 'getEditLog':       return {ok:true, data:getLogRows_()};
+    case 'appendLog':        return appendLogRows_(p.payload);
+    case 'clearLog':         return clearSheet_('編輯紀錄');
+    case 'getTeachers':      return {ok:true, data:getTeachers_()};
+    case 'getStudents':      return {ok:true, data:getStudents_()};
+    case 'addTeacher':       return appendUniqueRow_('老師名單', ['姓名','單位'], [p.name, p.dept || '']);
+    case 'deleteTeacher':    return delRow_('老師名單', p.name);
+    case 'addStudent':       return addStudent_(p);
+    case 'deleteStudent':    return delRow_('學生名單', p.name);
+    case 'clearAll':         return clearAll_();
+    default:                 return {ok:false, msg:'unknown action: ' + action};
+  }
+}
+
+function getSS_() {
+  const ss = SPREADSHEET_ID
+    ? SpreadsheetApp.openById(SPREADSHEET_ID)
+    : SpreadsheetApp.getActiveSpreadsheet();
+  if (!ss) throw new Error('找不到試算表。請從 Google Sheet 內開啟「擴充功能 → Apps Script」，或在程式碼最上方填入 SPREADSHEET_ID。');
+  return ss;
+}
+
+function initSheets_() {
+  ensureSheet_('學生填寫資料', ['索引鍵','資料JSON','最後更新']);
+  ensureSheet_('老師共享時段', ['索引鍵','資料JSON','最後更新']);
+  ensureSheet_('編輯紀錄',    ['時間','學生','老師','動作','時段']);
+  ensureSheet_('老師名單',    ['姓名','單位']);
+  ensureSheet_('學生名單',    ['姓名','學號','指導教授','口委1','口委2','口委3','口委4']);
   return {ok:true};
 }
 
-function ensureSheet(name, headers) {
-  let sh = SS.getSheetByName(name);
+function ensureSheet_(name, headers) {
+  const ss = getSS_();
+  let sh = ss.getSheetByName(name);
   if (!sh) {
-    sh = SS.insertSheet(name);
+    sh = ss.insertSheet(name);
     sh.appendRow(headers);
     sh.getRange(1,1,1,headers.length)
       .setFontWeight('bold').setBackground('#1c1c2e').setFontColor('#ffffff');
+  } else if (sh.getLastRow() === 0) {
+    sh.appendRow(headers);
   }
   return sh;
 }
 
-// Generic key-value upsert (col1=key, col2=JSON, col3=timestamp)
-function upsertRow(sheetName, key, payload) {
-  const sh = ensureSheet(sheetName, ['索引鍵','資料JSON','最後更新']);
-  const data = sh.getDataRange().getValues();
-  const now  = new Date().toLocaleString('zh-TW');
-  for (let i = 1; i < data.length; i++) {
-    if (data[i][0] === key) {
-      sh.getRange(i+1, 2, 1, 2).setValues([[payload, now]]);
-      return {ok:true};
-    }
-  }
-  sh.appendRow([key, payload, now]);
-  return {ok:true};
+function now_() {
+  return Utilities.formatDate(new Date(), Session.getScriptTimeZone() || 'Asia/Taipei', 'yyyy/MM/dd HH:mm:ss');
 }
 
-// Returns {key: parsedJSON} for a key-value sheet
-function getSheetJSON(sheetName) {
-  const sh = SS.getSheetByName(sheetName);
+// Generic key-value upsert: col1=key, col2=JSON, col3=timestamp
+function upsertRow_(sheetName, key, payload) {
+  if (!key) return {ok:false, msg:'missing key'};
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const sh = ensureSheet_(sheetName, ['索引鍵','資料JSON','最後更新']);
+    const data = sh.getDataRange().getValues();
+    const ts = now_();
+    for (let i = 1; i < data.length; i++) {
+      if (data[i][0] === key) {
+        sh.getRange(i+1, 2, 1, 2).setValues([[payload || '', ts]]);
+        return {ok:true};
+      }
+    }
+    sh.appendRow([key, payload || '', ts]);
+    return {ok:true};
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function getSheetJSON_(sheetName) {
+  const sh = getSS_().getSheetByName(sheetName);
   if (!sh || sh.getLastRow() < 2) return {};
   const rows = sh.getDataRange().getValues().slice(1);
-  const result = {};
-  rows.filter(r => r[0]).forEach(r => {
-    try { result[r[0]] = JSON.parse(r[1] || '{}'); } catch(e) {}
+  const out = {};
+  rows.forEach(r => {
+    const key = r[0];
+    if (!key) return;
+    try { out[key] = r[1] ? JSON.parse(r[1]) : {}; }
+    catch (err) { out[key] = r[1]; }
   });
-  return result;
+  return out;
 }
 
-// Edit log
-function getLogRows() {
-  const sh = SS.getSheetByName('編輯紀錄');
+function getLogRows_() {
+  const sh = getSS_().getSheetByName('編輯紀錄');
   if (!sh || sh.getLastRow() < 2) return [];
   return sh.getDataRange().getValues().slice(1).filter(r => r[0]).map(r => ({
-    ts: r[0], student: r[1], teacher: r[2], action: r[3], slots: r[4] ? r[4].split('|') : []
+    ts: r[0], student: r[1], teacher: r[2], action: r[3], slots: r[4] ? String(r[4]).split('|') : []
   }));
 }
 
-function appendLogRows(payload) {
+function appendLogRows_(payload) {
   const entries = JSON.parse(payload || '[]');
-  const sh = ensureSheet('編輯紀錄', ['時間','學生','老師','動作','時段']);
-  entries.forEach(e => {
-    sh.appendRow([e.ts, e.student, e.teacher, e.action, (e.slots||[]).join('|')]);
-  });
+  if (!Array.isArray(entries) || entries.length === 0) return {ok:true};
+  const sh = ensureSheet_('編輯紀錄', ['時間','學生','老師','動作','時段']);
+  const values = entries.map(e => [e.ts || now_(), e.student || '', e.teacher || '', e.action || '', (e.slots || []).join('|')]);
+  sh.getRange(sh.getLastRow()+1, 1, values.length, 5).setValues(values);
   return {ok:true};
 }
 
-function appendUniqueRow(sheetName, rowData) {
-  const sh = ensureSheet(sheetName, rowData.map((_,i)=>i));
-  const data = sh.getDataRange().getValues();
-  if (!data.slice(1).some(r => r[0] === rowData[0])) sh.appendRow(rowData);
-  return {ok:true};
+function appendUniqueRow_(sheetName, headers, rowData) {
+  if (!rowData[0]) return {ok:false, msg:'missing name'};
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const sh = ensureSheet_(sheetName, headers);
+    const data = sh.getDataRange().getValues();
+    if (!data.slice(1).some(r => r[0] === rowData[0])) sh.appendRow(rowData);
+    return {ok:true};
+  } finally {
+    lock.releaseLock();
+  }
 }
 
-function addStudent(p) {
-  const sh = ensureSheet('學生名單',['姓名','學號','指導教授','口委1','口委2','口委3','口委4']);
-  const data = sh.getDataRange().getValues();
-  if (!data.slice(1).some(r => r[0] === p.name))
-    sh.appendRow([p.name,p.id||'',p.advisor||'',p.c1||'',p.c2||'',p.c3||'',p.c4||'']);
-  return {ok:true};
+function addStudent_(p) {
+  return appendUniqueRow_('學生名單', ['姓名','學號','指導教授','口委1','口委2','口委3','口委4'],
+    [p.name, p.id || '', p.advisor || '', p.c1 || '', p.c2 || '', p.c3 || '', p.c4 || '']);
 }
 
-function delRow(sheetName, name) {
-  const sh = SS.getSheetByName(sheetName);
-  if (!sh) return {ok:false};
+function getTeachers_() {
+  const sh = getSS_().getSheetByName('老師名單');
+  if (!sh || sh.getLastRow() < 2) return [];
+  return sh.getDataRange().getValues().slice(1).filter(r => r[0]).map(r => ({name:r[0], dept:r[1] || ''}));
+}
+
+function getStudents_() {
+  const sh = getSS_().getSheetByName('學生名單');
+  if (!sh || sh.getLastRow() < 2) return [];
+  return sh.getDataRange().getValues().slice(1).filter(r => r[0]).map(r => ({
+    name:r[0], id:r[1] || '', advisor:r[2] || '', c1:r[3] || '', c2:r[4] || '', c3:r[5] || '', c4:r[6] || '', alt:[]
+  }));
+}
+
+function delRow_(sheetName, name) {
+  const sh = getSS_().getSheetByName(sheetName);
+  if (!sh) return {ok:true};
   const data = sh.getDataRange().getValues();
-  for (let i = data.length-1; i >= 1; i--)
+  for (let i = data.length-1; i >= 1; i--) {
     if (data[i][0] === name) sh.deleteRow(i+1);
+  }
   return {ok:true};
 }
 
-function clearSheet(name) {
-  const sh = SS.getSheetByName(name);
+function clearSheet_(name) {
+  const sh = getSS_().getSheetByName(name);
   if (sh && sh.getLastRow() > 1) sh.deleteRows(2, sh.getLastRow()-1);
   return {ok:true};
 }
 
-function clearAll() {
-  ['學生填寫資料','老師共享時段','編輯紀錄'].forEach(clearSheet);
+function clearAll_() {
+  ['學生填寫資料','老師共享時段','編輯紀錄'].forEach(clearSheet_);
   return {ok:true};
 }`;
 }
-
 // ═══════════════════════════════════════════════════════
 // APP.JS — Page controllers & UI logic
 // ═══════════════════════════════════════════════════════
@@ -1323,17 +1590,22 @@ function renderStudentForm() {
   if (!s) return;
   const d = getStuData(currentStudent) || {};
 
-  // Committee info display
-  const members = [s.c1, s.c2, s.c3, s.c4].filter(Boolean);
+  // Committee info display — flat list of all possible teachers (no 口委1/2/3 labels)
+  const allPossible = [s.advisor, s.c1, s.c2, s.c3, s.c4, ...(s.alt || [])].filter(Boolean);
+  // dedupe while preserving order
+  const seen = new Set();
+  const uniquePossible = allPossible.filter(n => seen.has(n) ? false : seen.add(n));
   document.getElementById('stu-committee-info').innerHTML = `
-    <div style="display:flex;flex-wrap:wrap;gap:10px">
-      <div><div class="text-muted" style="font-size:.73rem;margin-bottom:3px">指導教授</div>
-        <span class="tag" style="font-size:.86rem;padding:3px 12px">${s.advisor || '—'}</span></div>
-      ${members.map((c,i) => `<div><div class="text-muted" style="font-size:.73rem;margin-bottom:3px">口委 ${i+1}</div>
-        <span class="tag">${c}</span></div>`).join('')}
+    <div style="margin-bottom:6px">
+      <div class="text-muted" style="font-size:.76rem;margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em">所有可能參與的老師</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">
+        ${uniquePossible.map(n => {
+          const isAdvisor = n === s.advisor;
+          return `<span class="tag" style="${isAdvisor ? 'background:var(--paper2);border-color:var(--gold);color:var(--gold);font-weight:600' : ''}">${isAdvisor ? '★ ' : ''}${n}</span>`;
+        }).join('')}
+      </div>
     </div>
-    ${s.alt && s.alt.length ? `<div class="text-muted mt-2" style="font-size:.78rem">替選：${s.alt.join('、')}</div>` : ''}
-    <p class="text-muted mt-2" style="font-size:.78rem">資料有誤請聯絡管理者</p>`;
+    <p class="text-muted mt-2" style="font-size:.78rem">★ 為指導教授　｜　資料有誤請聯絡管理者</p>`;
 
   // Advisor attend
   document.getElementById('adv-name-lbl').textContent = s.advisor || '';
@@ -1535,19 +1807,24 @@ function collectAvailability() {
 function renderConfirmedCommittee(student, savedData) {
   const container = document.getElementById('conf-committee-wrap');
   container.innerHTML = '';
-  const allMembers = [student.c1, student.c2, student.c3, student.c4].filter(Boolean);
-  if (student.advisor) allMembers.unshift(student.advisor + '（指導教授）');
 
-  const confirmedMembers = new Set(savedData.confirmed?.committeePresent || allMembers.filter(m => !m.includes('指導教授')));
+  // Build full deduplicated list: advisor first, then c1-c4, then alt
+  const raw = [student.advisor, student.c1, student.c2, student.c3, student.c4, ...(student.alt || [])].filter(Boolean);
+  const seen = new Set();
+  const allPossible = raw.filter(n => seen.has(n) ? false : seen.add(n));
 
-  allMembers.forEach(name => {
-    const realName = name.replace('（指導教授）', '');
-    const isAdvisor = name.includes('指導教授');
+  // Previously saved selection (default: c1+c2+c3+c4, not advisor)
+  const defaultChecked = new Set([student.c1, student.c2, student.c3, student.c4].filter(Boolean));
+  const confirmedMembers = new Set(savedData.confirmed?.committeePresent || [...defaultChecked]);
+
+  allPossible.forEach(name => {
+    const isAdvisor = name === student.advisor;
     const lbl = document.createElement('label');
-    lbl.style.cssText = 'display:flex;align-items:center;gap:7px;cursor:pointer;font-size:.87rem;padding:4px 0';
-    lbl.innerHTML = `<input type="checkbox" style="width:16px;height:16px;accent-color:var(--accent)" 
-      value="${realName}" ${confirmedMembers.has(realName) ? 'checked' : ''}>
-      ${name} ${isAdvisor ? '' : ''}`;
+    lbl.style.cssText = 'display:flex;align-items:center;gap:8px;cursor:pointer;font-size:.87rem;padding:5px 0;border-bottom:1px solid var(--border)';
+    lbl.innerHTML = `
+      <input type="checkbox" style="width:16px;height:16px;accent-color:var(--accent);flex-shrink:0"
+        value="${name}" ${confirmedMembers.has(name) ? 'checked' : ''}>
+      <span>${name}${isAdvisor ? ' <span class="badge b-gold" style="font-size:.7rem">指導教授</span>' : ''}</span>`;
     container.appendChild(lbl);
   });
 }
@@ -1977,7 +2254,9 @@ function showAdmTab(id) {
   document.querySelectorAll('.adm-tab').forEach(t => t.classList.remove('active'));
   document.querySelectorAll('.adm-panel').forEach(p => p.classList.remove('active'));
   document.getElementById('adm-' + id).classList.add('active');
-  event.target.classList.add('active');
+  const tab = Array.from(document.querySelectorAll('.adm-tab'))
+    .find(t => (t.getAttribute('onclick') || '').includes(`'${id}'`));
+  if (tab) tab.classList.add('active');
   if (id === 'students') renderAdmStudents();
   if (id === 'teachers') renderAdmTeachers();
 }
@@ -2014,23 +2293,46 @@ function changePin() {
 }
 
 async function saveGasUrl() {
-  STATE.gasUrl = document.getElementById('gas-url-input').value.trim();
+  STATE.gasUrl = normalizeGasUrl(document.getElementById('gas-url-input').value);
+  document.getElementById('gas-url-input').value = STATE.gasUrl;
   localStorage.setItem('gasUrl', STATE.gasUrl);
-  await updateSyncStatus();
+  if (!STATE.gasUrl) { setSyncIndicator('local'); return; }
+
+  setSyncIndicator('checking');
+  const ping = await gasCall('ping');
+  if (ping?.ok === false) {
+    setSyncIndicator(false);
+    toast('連線失敗：' + (ping.msg || '請確認 Apps Script 已部署為 /exec 且存取權為所有人'), 'err');
+    return;
+  }
+
+  const pushed = await pushAllLocalToGas();
+  if (pushed?.ok === false) {
+    setSyncIndicator(false);
+    toast('已連線但同步失敗：' + (pushed.msg || '請檢查 Apps Script 權限與程式碼版本'), 'err');
+    return;
+  }
+  setSyncIndicator(true);
+  toast('✅ 已連線，並已同步目前本機資料到 Google Sheet', 'ok');
 }
 async function initGasSheets() {
   const r = await gasCall('init');
-  toast(r?.ok !== false ? '✅ Google Sheet 初始化完成' : '初始化失敗', r?.ok !== false ? 'ok' : 'err');
+  if (r?.ok !== false) { setSyncIndicator(true); toast('✅ Google Sheet 初始化完成', 'ok'); }
+  else { setSyncIndicator(false); toast('初始化失敗：' + (r.msg || '請檢查 Apps Script 部署'), 'err'); }
 }
-async function updateSyncStatus() {
+function setSyncIndicator(status) {
   const dot = document.getElementById('sync-dot');
   const lbl = document.getElementById('sync-lbl');
-  if (!STATE.gasUrl) { dot.className = 'sync-dot local'; lbl.textContent = '本機模式'; return; }
-  try {
-    const r = await gasCall('ping');
-    if (r?.ok) { dot.className = 'sync-dot ok'; lbl.textContent = '已連線'; }
-    else        { dot.className = 'sync-dot err'; lbl.textContent = '連線失敗'; }
-  } catch { dot.className = 'sync-dot err'; lbl.textContent = '連線失敗'; }
+  if (!dot || !lbl) return;
+  if (status === 'local' || !STATE.gasUrl) { dot.className = 'sync-dot local'; lbl.textContent = '本機模式'; return; }
+  if (status === 'checking') { dot.className = 'sync-dot local'; lbl.textContent = '連線檢查中'; return; }
+  if (status === true) { dot.className = 'sync-dot ok'; lbl.textContent = '已連線'; return; }
+  dot.className = 'sync-dot err'; lbl.textContent = '連線失敗';
+}
+async function updateSyncStatus() {
+  if (!STATE.gasUrl) { setSyncIndicator('local'); return; }
+  const r = await gasCall('ping');
+  setSyncIndicator(r?.ok !== false);
 }
 function copyGasScript() {
   navigator.clipboard.writeText(GAS_SCRIPT()).then(() => toast('✅ 已複製程式碼'));
@@ -2096,17 +2398,52 @@ async function admDeleteTeacher(name) {
   await gasCall('deleteTeacher', { name }); toast(`已刪除 ${name}`); renderAdmTeachers();
 }
 function exportCSV() {
-  let csv = '\uFEFF學生,學號,指導教授,指導教授出席,口委1,口委2,口委3,口委4,狀態,確定日期,開始,結束,地點,出席口委,備註\n';
+  // Header
+  let csv = '\uFEFF學生,學號,指導教授,指導教授出席,所有可能口委,狀態,確定日期,開始,結束,地點,出席口委,備註\n';
   STATE.students.forEach(s => {
-    const d = STATE.stuData[s.name]||{}, c=d.confirmed||{};
-    csv += `"${s.name}","${s.id||''}","${s.advisor||''}","${d.advisorAttend?'是':'否'}","${s.c1||''}","${s.c2||''}","${s.c3||''}","${s.c4||''}","${d.mode||'未填'}","${c.date||''}","${c.startTime||''}","${c.endTime||''}","${c.location||''}","${(c.committeePresent||[]).join('|')}","${c.note||''}"\n`;
+    const d = STATE.stuData[s.name] || {}, c = d.confirmed || {};
+    // All possible teachers (advisor + c1-c4 + alt), deduped
+    const seen = new Set();
+    const allPossible = [s.advisor, s.c1, s.c2, s.c3, s.c4, ...(s.alt||[])]
+      .filter(Boolean).filter(n => seen.has(n) ? false : seen.add(n));
+    csv += `"${s.name}","${s.id||''}","${s.advisor||''}","${d.advisorAttend?'是':'否'}","${allPossible.join('|')}","${d.mode||'未填'}","${c.date||''}","${c.startTime||''}","${c.endTime||''}","${c.location||''}","${(c.committeePresent||[]).join('|')}","${c.note||''}"\n`;
   });
-  const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
-  a.download='口試排程資料.csv'; a.click();
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], {type:'text/csv;charset=utf-8'}));
+  a.download = '口試排程資料.csv'; a.click();
 }
+
+// Force push all local data to Google Sheet (for when Sheet is empty but browser has data)
+async function forceSyncToGas() {
+  if (!STATE.gasUrl) { toast('請先設定 Google Sheet URL', 'err'); return; }
+  const btn = document.getElementById('force-sync-btn');
+  btn.disabled = true; btn.textContent = '同步中...';
+  let count = 0;
+  try {
+    // Push all stuData
+    for (const [name, data] of Object.entries(STATE.stuData)) {
+      await gasCall('saveStuData', { name, payload: JSON.stringify(data) });
+      count++;
+    }
+    // Push all teacherAvail
+    for (const [teacher, data] of Object.entries(STATE.teacherAvail)) {
+      await gasCall('saveTeacherAvail', { teacher, payload: JSON.stringify(data) });
+    }
+    // Push editLog in one batch
+    if (STATE.editLog.length > 0) {
+      await gasCall('appendLog', { payload: JSON.stringify(STATE.editLog) });
+    }
+    toast(`✅ 已同步 ${count} 筆學生資料到 Google Sheet`, 'ok');
+  } catch(e) {
+    toast('同步失敗：' + e.message, 'err');
+  }
+  btn.disabled = false; btn.textContent = '☁️ 強制同步到 Google Sheet';
+}
+
 async function clearAllData() {
-  showConfirm('清除所有填寫資料','無法復原。',async()=>{
-    await gasCall('clearAll'); STATE.stuData={}; saveLocal(); toast('已清除');
+  showConfirm('清除所有填寫資料','無法復原。', async () => {
+    await gasCall('clearAll'); STATE.stuData = {}; STATE.teacherAvail = {}; STATE.editLog = [];
+    saveLocal(); toast('已清除');
   });
 }
 
@@ -2203,7 +2540,15 @@ function exportLogCSV() {
 
 stateInit();
 initStudentPage();
-syncOnLoad().then(() => updateSyncStatus());
+syncOnLoad().then(() => {
+  updateSyncStatus();
+  // If GAS URL is set, try to show Sheet link
+  if (STATE.gasUrl) {
+    // Extract spreadsheet id hint — user can open Sheet directly from their Drive
+    const wrap = document.getElementById('gas-sheet-link-wrap');
+    if (wrap) wrap.style.display = 'block';
+  }
+});
 </script>
 </body>
 </html>
