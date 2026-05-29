@@ -681,7 +681,7 @@ pre {
     <div class="pin-screen">
       <div style="font-size:3rem;margin-bottom:14px">🔒</div>
       <h3>管理者登入</h3>
-      <p class="text-muted mt-1">PIN 碼</p>
+      <p class="text-muted mt-1">請輸入管理者 PIN 碼</p>
       <div class="pin-digits">
         <input type="password" maxlength="1" id="pa" oninput="pinNext(this,'pb')" onkeydown="pinKey(event,this,null,'pb')">
         <input type="password" maxlength="1" id="pb" oninput="pinNext(this,'pc')" onkeydown="pinKey(event,this,'pa','pc')">
@@ -718,14 +718,14 @@ pre {
       </div>
       <div class="card">
         <div class="card-title">🔗 Google Sheet 同步（選用）</div>
-        <div class="notice n-info">設定後資料同步至 Google Sheet，換裝置也不遺失。不設定則只存在目前瀏覽器。</div>
+        <div class="notice n-info">此版本已內建 Apps Script URL；使用者打開 GitHub Pages 後會自動連線並讀取後台資料。</div>
         <div class="form-row" style="align-items:flex-end">
-          <div class="form-group"><label>Apps Script URL</label>
-            <input type="url" id="gas-url-input" placeholder="https://script.google.com/macros/s/...">
+          <div class="form-group"><label>固定 Apps Script URL</label>
+            <input type="url" id="gas-url-input" placeholder="https://script.google.com/macros/s/..." readonly>
           </div>
         </div>
         <div class="flex gap-2 mt-2 wrap">
-          <button class="btn btn-primary" onclick="saveGasUrl()">💾 儲存、測試並同步本機資料</button>
+          <button class="btn btn-primary" onclick="saveGasUrl()">🔄 重新測試並同步資料</button>
           <button class="btn btn-gold"    onclick="initGasSheets()">🏗️ 初始化試算表</button>
           <button class="btn btn-teal"    onclick="forceSyncToGas(this)">☁️ 強制同步目前資料</button>
         </div>
@@ -743,7 +743,7 @@ pre {
         <div class="card-title">🔑 更改 PIN 碼</div>
         <div class="form-row"><div class="form-group" style="max-width:180px">
           <label>新 PIN（4位數字）</label>
-          <input type="password" id="new-pin-input" maxlength="4" placeholder="1234">
+          <input type="password" id="new-pin-input" maxlength="4" placeholder="4位數字">
         </div></div>
         <button class="btn btn-secondary mt-2" onclick="changePin()">更改</button>
       </div>
@@ -966,8 +966,11 @@ function fmtDateFull(d) {
 // STATE & STORAGE
 // ═══════════════════════════════════════════════════════
 
+const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbz-pkxTbeBWu3ssstWFmubwxVuvcRQN32eFW49lNCw8GrGFNZicznjDsF3pTOLRpF70/exec';
+const FORCE_DEFAULT_GAS_URL = true;
+
 const STATE = {
-  gasUrl:   '',
+  gasUrl:   DEFAULT_GAS_URL,
   adminPin: '1234',
   teachers: [],
   students: [],
@@ -977,7 +980,9 @@ const STATE = {
 };
 
 function stateInit() {
-  STATE.gasUrl   = normalizeGasUrl(localStorage.getItem('gasUrl') || '');
+  const storedGasUrl = localStorage.getItem('gasUrl') || '';
+  STATE.gasUrl = normalizeGasUrl(FORCE_DEFAULT_GAS_URL ? DEFAULT_GAS_URL : (DEFAULT_GAS_URL || storedGasUrl));
+  if (STATE.gasUrl) localStorage.setItem('gasUrl', STATE.gasUrl);
   STATE.adminPin = localStorage.getItem('adminPin') || '1234';
 
   const extraTeachers = JSON.parse(localStorage.getItem('extraTeachers') || '[]');
@@ -1266,12 +1271,37 @@ async function fetchAllFromGas() {
   };
 }
 
+function newerRecord(localObj, remoteObj, key = 'updatedAt') {
+  if (!localObj) return remoteObj;
+  if (!remoteObj) return localObj;
+  const lt = Date.parse(localObj[key] || localObj.lastEditedAt || '') || 0;
+  const rt = Date.parse(remoteObj[key] || remoteObj.lastEditedAt || '') || 0;
+  return lt > rt ? localObj : remoteObj;
+}
+
+function mergeKeyedRecords(localMap = {}, remoteMap = {}, key = 'updatedAt') {
+  const merged = {};
+  const keys = new Set([...Object.keys(remoteMap || {}), ...Object.keys(localMap || {})]);
+  keys.forEach(k => { merged[k] = newerRecord(localMap[k], remoteMap[k], key); });
+  return merged;
+}
+
+function mergeEditLogs(localLog = [], remoteLog = []) {
+  const seen = new Set();
+  const out = [];
+  [...remoteLog, ...localLog].forEach(e => {
+    const key = JSON.stringify([e.ts || '', e.student || '', e.teacher || '', e.action || '', e.slots || []]);
+    if (!seen.has(key)) { seen.add(key); out.push(e); }
+  });
+  return out.sort((a, b) => (Date.parse(a.ts || '') || 0) - (Date.parse(b.ts || '') || 0));
+}
+
 async function loadAllFromGas() {
   const remote = await fetchAllFromGas();
-  // Remote data should be visible on new devices, but do not erase local-only keys.
-  STATE.stuData      = { ...remote.stuData, ...STATE.stuData };
-  STATE.teacherAvail = { ...remote.teacherAvail, ...STATE.teacherAvail };
-  if (remote.editLog.length > STATE.editLog.length) STATE.editLog = remote.editLog;
+  // Google Sheet is the shared source of truth, but keep newer local records if a previous sync failed.
+  STATE.stuData      = mergeKeyedRecords(STATE.stuData, remote.stuData, 'updatedAt');
+  STATE.teacherAvail = mergeKeyedRecords(STATE.teacherAvail, remote.teacherAvail, 'lastEditedAt');
+  STATE.editLog      = mergeEditLogs(STATE.editLog, remote.editLog);
   mergeRemoteLists(remote.teachers, remote.students);
   saveLocal();
   return remote;
@@ -1844,11 +1874,19 @@ async function savePending() {
     availability: avail,
     notePending: document.getElementById('note-pending').value,
   };
-  setStuData(currentStudent, data);
-  // Sync each teacher's slots to shared table
-  syncAvailabilityFromForm(currentStudent, avail);
-  toast(`✅ ${currentStudent} 的資料已儲存`);
+
+  setSyncIndicator('checking');
+  const r1 = await setStuData(currentStudent, data);
+  const r2 = await syncAvailabilityFromForm(currentStudent, avail);
+  const ok = r1?.ok !== false && r2?.ok !== false;
+  setSyncIndicator(ok);
+  if (!ok) {
+    toast('資料已先存在本機，但同步後台失敗：' + (r1?.msg || r2?.msg || '請確認 Apps Script 部署狀態'), 'err');
+    return;
+  }
+  toast(`✅ ${currentStudent} 的資料已儲存並同步後台`);
 }
+
 
 async function saveConfirmed() {
   if (!currentStudent) { toast('請先選擇姓名', 'err'); return; }
@@ -1867,9 +1905,18 @@ async function saveConfirmed() {
       committeePresent: getConfirmedCommittee(),
     }
   };
-  setStuData(currentStudent, data);
-  toast(`✅ ${currentStudent} 的口試時間已確認：${date} ${startTime}–${endTime}`);
+
+  setSyncIndicator('checking');
+  const r = await setStuData(currentStudent, data);
+  const ok = r?.ok !== false;
+  setSyncIndicator(ok);
+  if (!ok) {
+    toast('資料已先存在本機，但同步後台失敗：' + (r?.msg || '請確認 Apps Script 部署狀態'), 'err');
+    return;
+  }
+  toast(`✅ ${currentStudent} 的口試時間已確認並同步後台：${date} ${startTime}–${endTime}`);
 }
+
 
 function onAdvisorAttendChange() {
   const s = STATE.students.find(x => x.name === currentStudent);
@@ -1882,13 +1929,19 @@ async function selfAddStudent() {
   const name = document.getElementById('self-add-name').value.trim();
   if (!name) { toast('請輸入姓名', 'err'); return; }
   if (STATE.students.find(s => s.name === name)) { toast('名單中已有此姓名', 'warn'); return; }
-  await gasCall('addStudent', { name });
+  setSyncIndicator('checking');
+  const r = await gasCall('addStudent', { name });
+  const ok = r?.ok !== false;
+  setSyncIndicator(ok);
+  if (!ok) { toast('新增失敗：' + (r?.msg || '無法同步到後台'), 'err'); return; }
+  addLocalStudent({ name });
   toast(`已新增 ${name}`);
   initStudentPage();
   document.getElementById('stu-name-sel').value = name;
   currentStudent = name;
   renderStudentForm();
 }
+
 
 // ════════════════════════════════════════════════════════
 // PAGE: CALENDAR
@@ -2353,28 +2406,70 @@ function renderAdmStudents() {
 async function admAddStudent() {
   const name = document.getElementById('adm-sn').value.trim();
   if (!name) { toast('請填寫姓名', 'err'); return; }
-  await gasCall('addStudent', { name, id:document.getElementById('adm-si').value.trim(), advisor:document.getElementById('adm-sa').value.trim(), c1:document.getElementById('adm-sc1').value.trim(), c2:document.getElementById('adm-sc2').value.trim(), c3:document.getElementById('adm-sc3').value.trim(), c4:document.getElementById('adm-sc4').value.trim() });
+  const student = {
+    name,
+    id: document.getElementById('adm-si').value.trim(),
+    advisor: document.getElementById('adm-sa').value.trim(),
+    c1: document.getElementById('adm-sc1').value.trim(),
+    c2: document.getElementById('adm-sc2').value.trim(),
+    c3: document.getElementById('adm-sc3').value.trim(),
+    c4: document.getElementById('adm-sc4').value.trim(),
+    alt: []
+  };
+  setSyncIndicator('checking');
+  const r = await gasCall('addStudent', student);
+  const ok = r?.ok !== false;
+  setSyncIndicator(ok);
+  if (!ok) { toast('新增學生失敗：' + (r?.msg || '無法同步到後台'), 'err'); return; }
+  addLocalStudent(student);
   toast(`✅ 已新增 ${name}`);
   ['adm-sn','adm-si','adm-sa','adm-sc1','adm-sc2','adm-sc3','adm-sc4'].forEach(id => document.getElementById(id).value='');
+  initStudentPage();
   renderAdmStudents();
 }
+
+
 async function admDeleteStudent(name) {
   showConfirm(`確認刪除「${name}」？`, '此操作無法復原。', async () => {
-    await gasCall('deleteStudent', { name }); toast(`已刪除 ${name}`); renderAdmStudents();
+    setSyncIndicator('checking');
+    const r = await gasCall('deleteStudent', { name });
+    const ok = r?.ok !== false;
+    setSyncIndicator(ok);
+    if (!ok) { toast('刪除失敗：' + (r?.msg || '無法同步到後台'), 'err'); return; }
+    removeLocalStudent(name);
+    toast(`已刪除 ${name}`);
+    initStudentPage();
+    renderAdmStudents();
   });
 }
+
+
 async function admBatchImport() {
   const raw = document.getElementById('adm-batch').value.trim();
   if (!raw) return;
   let count = 0;
+  setSyncIndicator('checking');
   for (const line of raw.split('\n').filter(l => l.trim())) {
     const [name,id,advisor,c1,c2,c3,c4] = line.split(',').map(p=>p.trim());
-    if (name) { await gasCall('addStudent',{name,id:id||'',advisor:advisor||'',c1:c1||'',c2:c2||'',c3:c3||'',c4:c4||''}); count++; }
+    if (!name) continue;
+    const student = {name,id:id||'',advisor:advisor||'',c1:c1||'',c2:c2||'',c3:c3||'',c4:c4||'',alt:[]};
+    const r = await gasCall('addStudent', student);
+    if (r?.ok === false) {
+      setSyncIndicator(false);
+      toast(`匯入到「${name}」時失敗：` + (r.msg || '無法同步到後台'), 'err');
+      return;
+    }
+    addLocalStudent(student);
+    count++;
   }
+  setSyncIndicator(true);
   toast(`✅ 已匯入 ${count} 位學生`);
   document.getElementById('adm-batch').value='';
+  initStudentPage();
   renderAdmStudents();
 }
+
+
 function renderAdmTeachers() {
   const list = document.getElementById('adm-tch-list');
   document.getElementById('adm-tch-count').textContent = STATE.teachers.length + ' 位';
@@ -2388,15 +2483,33 @@ async function admAddTeacher() {
   const name = document.getElementById('adm-tn').value.trim();
   const dept = document.getElementById('adm-td').value;
   if (!name) { toast('請填寫姓名', 'err'); return; }
-  await gasCall('addTeacher', { name, dept });
+  setSyncIndicator('checking');
+  const r = await gasCall('addTeacher', { name, dept });
+  const ok = r?.ok !== false;
+  setSyncIndicator(ok);
+  if (!ok) { toast('新增老師失敗：' + (r?.msg || '無法同步到後台'), 'err'); return; }
+  addLocalTeacher({ name, dept });
   toast(`✅ 已新增 ${name}`);
   document.getElementById('adm-tn').value='';
   renderAdmTeachers();
+  buildCalTeacherList();
 }
+
+
 async function admDeleteTeacher(name) {
   if (TEACHERS.find(t => t.name === name)) { toast('內建老師無法在此刪除', 'warn'); return; }
-  await gasCall('deleteTeacher', { name }); toast(`已刪除 ${name}`); renderAdmTeachers();
+  setSyncIndicator('checking');
+  const r = await gasCall('deleteTeacher', { name });
+  const ok = r?.ok !== false;
+  setSyncIndicator(ok);
+  if (!ok) { toast('刪除老師失敗：' + (r?.msg || '無法同步到後台'), 'err'); return; }
+  removeLocalTeacher(name);
+  toast(`已刪除 ${name}`);
+  renderAdmTeachers();
+  buildCalTeacherList();
 }
+
+
 function exportCSV() {
   // Header
   let csv = '\uFEFF學生,學號,指導教授,指導教授出席,所有可能口委,狀態,確定日期,開始,結束,地點,出席口委,備註\n';
@@ -2456,8 +2569,42 @@ function showConfirm(title, msg, cb) {
 function closeConfirm() { document.getElementById('confirm-modal').classList.remove('open'); }
 function doConfirm() { closeConfirm(); if(_confirmCb) _confirmCb(); }
 
+function refreshCurrentViewAfterSync() {
+  const active = document.querySelector('.page.active')?.id || 'page-student';
+  initStudentPage();
+  if (active === 'page-calendar') initCalendarPage();
+  if (active === 'page-overview') initOverviewPage();
+  if (active === 'page-admin' && adminUnlocked) {
+    initAdminPage();
+    renderAdmStudents();
+    renderAdmTeachers();
+  }
+}
+
 async function syncOnLoad() {
-  if (STATE.gasUrl) { await loadAllFromGas(); updateSyncStatus(); }
+  if (!STATE.gasUrl) { setSyncIndicator('local'); return; }
+  setSyncIndicator('checking');
+  const ping = await gasCall('ping');
+  if (ping?.ok === false) {
+    setSyncIndicator(false);
+    toast('後台連線失敗，請通知管理者檢查 Apps Script 部署。', 'err');
+    return;
+  }
+  const init = await gasCall('init');
+  if (init?.ok === false) {
+    setSyncIndicator(false);
+    toast('後台初始化失敗：' + (init.msg || '請通知管理者檢查 Apps Script 權限'), 'err');
+    return;
+  }
+  try {
+    await loadAllFromGas();
+    setSyncIndicator(true);
+    refreshCurrentViewAfterSync();
+  } catch (e) {
+    console.error('[syncOnLoad failed]', e);
+    setSyncIndicator(false);
+    toast('後台資料讀取失敗：' + (e.message || e), 'err');
+  }
 }
 
 // ── Edit Log (Admin) ─────────────────────────────────
@@ -2540,15 +2687,7 @@ function exportLogCSV() {
 
 stateInit();
 initStudentPage();
-syncOnLoad().then(() => {
-  updateSyncStatus();
-  // If GAS URL is set, try to show Sheet link
-  if (STATE.gasUrl) {
-    // Extract spreadsheet id hint — user can open Sheet directly from their Drive
-    const wrap = document.getElementById('gas-sheet-link-wrap');
-    if (wrap) wrap.style.display = 'block';
-  }
-});
+syncOnLoad();
 </script>
 </body>
 </html>
