@@ -618,7 +618,7 @@ pre {
       <div class="page-title">口試時間表</div>
       <div class="page-sub">6/22（一）至 7/3（五）</div>
     </div>
-    <button class="btn btn-secondary btn-sm" onclick="renderCalendar()">🔄 重新整理</button>
+    <button class="btn btn-secondary btn-sm" onclick="refreshFromGas('calendar', this)">🔄 重新整理</button>
   </div>
   <div id="cal-wrap">
     <div class="cal-controls">
@@ -664,7 +664,7 @@ pre {
       <button class="btn btn-secondary btn-sm ov-filter-btn" onclick="filterOverview('confirmed')">✅ 已確定</button>
       <button class="btn btn-secondary btn-sm ov-filter-btn" onclick="filterOverview('pending')">🔄 協調中</button>
       <button class="btn btn-secondary btn-sm ov-filter-btn" onclick="filterOverview('empty')">⬜ 未填</button>
-      <button class="btn btn-secondary btn-sm"              onclick="initOverviewPage()">🔄 重新整理</button>
+      <button class="btn btn-secondary btn-sm"              onclick="refreshFromGas('overview', this)">🔄 重新整理</button>
     </div>
   </div>
   <div id="conflict-alert" class="notice n-err" style="display:none"><span>⚠️</span><span id="conflict-msg"></span></div>
@@ -815,7 +815,7 @@ pre {
             <option value="add">新增有空</option>
             <option value="remove">移除有空</option>
           </select>
-          <button class="btn btn-secondary btn-sm" onclick="loadEditLog()">🔄 重新整理</button>
+          <button class="btn btn-secondary btn-sm" onclick="refreshFromGas('log', this)">🔄 重新整理</button>
           <button class="btn btn-danger btn-sm" onclick="clearLog()">🗑️ 清除紀錄</button>
         </div>
         <div class="notice n-info" style="font-size:.82rem">
@@ -2569,6 +2569,54 @@ function showConfirm(title, msg, cb) {
 function closeConfirm() { document.getElementById('confirm-modal').classList.remove('open'); }
 function doConfirm() { closeConfirm(); if(_confirmCb) _confirmCb(); }
 
+
+async function refreshFromGas(target = 'current', btn = null) {
+  if (!STATE.gasUrl) {
+    setSyncIndicator('local');
+    toast('目前沒有後台連線設定。', 'warn');
+    return;
+  }
+
+  const originalText = btn ? btn.textContent : '';
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = '重新整理中...';
+  }
+
+  setSyncIndicator('checking');
+  try {
+    const ping = await gasCall('ping');
+    if (ping?.ok === false) throw new Error(ping.msg || 'Apps Script 連線失敗');
+
+    const init = await gasCall('init');
+    if (init?.ok === false) throw new Error(init.msg || 'Google Sheet 初始化失敗');
+
+    await loadAllFromGas();
+    setSyncIndicator(true);
+
+    if (target === 'calendar') {
+      initCalendarPage();
+    } else if (target === 'overview') {
+      initOverviewPage();
+    } else if (target === 'log') {
+      await loadEditLog();
+    } else {
+      refreshCurrentViewAfterSync();
+    }
+
+    toast('✅ 已重新從後台載入最新資料', 'ok');
+  } catch (e) {
+    console.error('[manual refresh failed]', e);
+    setSyncIndicator(false);
+    toast('重新整理失敗：' + (e.message || e), 'err');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = originalText || '🔄 重新整理';
+    }
+  }
+}
+
 function refreshCurrentViewAfterSync() {
   const active = document.querySelector('.page.active')?.id || 'page-student';
   initStudentPage();
@@ -2610,7 +2658,14 @@ async function syncOnLoad() {
 // ── Edit Log (Admin) ─────────────────────────────────
 async function loadEditLog() {
   const r = await gasCall('getEditLog');
+  if (r?.ok === false) {
+    toast('編輯紀錄讀取失敗：' + (r.msg || '無法連線後台'), 'err');
+  }
   const log = Array.isArray(r?.data) ? r.data : STATE.editLog;
+  if (Array.isArray(r?.data)) {
+    STATE.editLog = r.data;
+    saveLocal();
+  }
   const tbody = document.getElementById('log-tbody');
   const search = (document.getElementById('log-search')?.value || '').toLowerCase();
   const actionFilter = document.getElementById('log-action-filter')?.value || 'all';
