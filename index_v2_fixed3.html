@@ -1,0 +1,2554 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>成大都計所｜口試排程系統</title>
+<style>/* ═══════════════════════════════════════════════════════
+   NCKU DEFENSE SCHEDULER — STYLES
+   Aesthetic: Clean academic / refined institutional
+   Font: Noto Serif TC (headings) + Noto Sans TC (body)
+═══════════════════════════════════════════════════════ */
+@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;600;700&family=Noto+Sans+TC:wght@300;400;500;700&display=swap');
+
+:root {
+  --ink:        #18181f;
+  --ink2:       #38384a;
+  --paper:      #f8f6f1;
+  --paper2:     #edeae0;
+  --paper3:     #e0ddd3;
+  --accent:     #7c1d1d;
+  --accent2:    #a82828;
+  --gold:       #a07228;
+  --gold2:      #c99040;
+  --teal:       #1a6060;
+  --teal2:      #228080;
+  --muted:      #706858;
+  --border:     #d4cfc2;
+  --ok:         #245c3e;
+  --ok-bg:      #e6f4ec;
+  --warn:       #6b4f00;
+  --warn-bg:    #fdf5dc;
+  --info:       #1a3d80;
+  --info-bg:    #e8effe;
+  --err:        #8b1a1a;
+  --err-bg:     #fde8e8;
+  --shadow:     0 1px 8px rgba(24,24,31,.08);
+  --shadow-md:  0 4px 20px rgba(24,24,31,.12);
+  --shadow-lg:  0 10px 40px rgba(24,24,31,.18);
+  --r:          10px;
+
+  /* Calendar cell colors */
+  --cal-confirmed: #1a5c3a;
+  --cal-confirmed-bg: #d4eddf;
+  --cal-avail: #1a4080;
+  --cal-avail-bg: #dce8fb;
+  --cal-slot-bg: rgba(160,114,40,.07);
+  --cal-slot-border: rgba(160,114,40,.25);
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { font-size: 15px; }
+
+body {
+  font-family: 'Noto Sans TC', sans-serif;
+  background: var(--paper);
+  color: var(--ink);
+  min-height: 100vh;
+  line-height: 1.6;
+}
+
+/* ── HEADER ─────────────────────────────────────── */
+#app-header {
+  background: var(--ink);
+  position: sticky; top: 0; z-index: 200;
+  box-shadow: 0 2px 20px rgba(0,0,0,.35);
+}
+.hdr-inner {
+  max-width: 1280px; margin: 0 auto;
+  display: flex; align-items: center; padding: 0 24px; height: 58px; gap: 20px;
+}
+.app-logo {
+  font-family: 'Noto Serif TC', serif;
+  font-size: .95rem; font-weight: 700;
+  color: #c9b07a; letter-spacing: .06em; white-space: nowrap;
+}
+.app-logo span { color: rgba(255,255,255,.3); margin: 0 8px; }
+
+.nav-tabs { display: flex; gap: 2px; flex: 1; }
+.nav-tab {
+  padding: 7px 16px; border: none; border-radius: 7px;
+  background: transparent; color: rgba(248,246,241,.5);
+  font-family: 'Noto Sans TC', sans-serif; font-size: .84rem;
+  cursor: pointer; transition: all .2s; white-space: nowrap;
+}
+.nav-tab:hover { background: rgba(255,255,255,.08); color: #f8f6f1; }
+.nav-tab.active { background: var(--accent); color: #fff; font-weight: 500; }
+
+.hdr-sync {
+  margin-left: auto;
+  display: flex; align-items: center; gap: 8px;
+}
+.sync-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: #666; flex-shrink: 0;
+  transition: background .3s;
+}
+.sync-dot.ok  { background: #4caf50; }
+.sync-dot.err { background: #f44336; }
+.sync-dot.local { background: #ff9800; }
+.sync-label { font-size: .75rem; color: rgba(248,246,241,.45); }
+
+/* ── LAYOUT ─────────────────────────────────────── */
+#app-main { max-width: 1280px; margin: 0 auto; padding: 28px 20px; }
+.page { display: none; }
+.page.active { display: block; }
+
+.page-header {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  margin-bottom: 24px; gap: 16px; flex-wrap: wrap;
+}
+.page-title {
+  font-family: 'Noto Serif TC', serif;
+  font-size: 1.5rem; font-weight: 700; color: var(--ink);
+}
+.page-sub { color: var(--muted); font-size: .84rem; margin-top: 4px; }
+
+/* ── CARDS ──────────────────────────────────────── */
+.card {
+  background: #fff; border: 1px solid var(--border);
+  border-radius: var(--r); padding: 22px 26px;
+  margin-bottom: 16px; box-shadow: var(--shadow);
+}
+.card-title {
+  font-family: 'Noto Serif TC', serif;
+  font-size: .98rem; font-weight: 700; color: var(--ink);
+  margin-bottom: 14px; padding-bottom: 10px;
+  border-bottom: 2px solid var(--paper2);
+  display: flex; align-items: center; gap: 8px;
+}
+
+/* ── FORM ELEMENTS ──────────────────────────────── */
+.form-row { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 14px; }
+.form-group { display: flex; flex-direction: column; gap: 5px; flex: 1; min-width: 150px; }
+.form-group label {
+  font-size: .76rem; font-weight: 600; color: var(--muted);
+  text-transform: uppercase; letter-spacing: .06em;
+}
+.form-group input,
+.form-group select,
+.form-group textarea {
+  padding: 9px 12px; border: 1.5px solid var(--border); border-radius: 8px;
+  font-family: 'Noto Sans TC', sans-serif; font-size: .88rem;
+  color: var(--ink); background: var(--paper); outline: none;
+  transition: border-color .2s, background .2s;
+}
+.form-group input:focus,
+.form-group select:focus,
+.form-group textarea:focus { border-color: var(--accent); background: #fff; }
+.form-group textarea { resize: vertical; }
+
+/* ── BUTTONS ────────────────────────────────────── */
+.btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 20px; border: none; border-radius: 8px;
+  font-family: 'Noto Sans TC', sans-serif; font-size: .86rem;
+  font-weight: 500; cursor: pointer; transition: all .2s;
+  white-space: nowrap;
+}
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+.btn-primary { background: var(--accent); color: #fff; }
+.btn-primary:hover:not(:disabled) { background: var(--accent2); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(124,29,29,.3); }
+.btn-secondary { background: var(--paper2); color: var(--ink); border: 1px solid var(--border); }
+.btn-secondary:hover:not(:disabled) { background: var(--paper3); }
+.btn-teal { background: var(--teal); color: #fff; }
+.btn-teal:hover:not(:disabled) { background: var(--teal2); transform: translateY(-1px); }
+.btn-gold { background: var(--gold); color: #fff; }
+.btn-gold:hover:not(:disabled) { background: var(--gold2); }
+.btn-danger { background: #c0392b; color: #fff; }
+.btn-danger:hover:not(:disabled) { background: #a93226; }
+.btn-sm { padding: 5px 13px; font-size: .8rem; }
+.btn-xs { padding: 3px 9px; font-size: .74rem; }
+
+/* ── BADGES & TAGS ──────────────────────────────── */
+.badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 2px 9px; border-radius: 999px; font-size: .74rem; font-weight: 600;
+}
+.b-ok   { background: var(--ok-bg);   color: var(--ok); }
+.b-warn { background: var(--warn-bg); color: var(--warn); }
+.b-info { background: var(--info-bg); color: var(--info); }
+.b-err  { background: var(--err-bg);  color: var(--err); }
+.b-muted{ background: var(--paper2);  color: var(--muted); }
+.b-gold { background: #fef3dc; color: var(--gold); }
+
+.tag {
+  display: inline-block; padding: 2px 9px; border-radius: 999px;
+  font-size: .78rem; background: var(--paper2);
+  color: var(--ink2); border: 1px solid var(--border); margin: 2px;
+}
+
+/* ── NOTICES ────────────────────────────────────── */
+.notice {
+  display: flex; gap: 10px; align-items: flex-start;
+  padding: 11px 15px; border-radius: 8px; font-size: .85rem;
+  line-height: 1.65; margin-bottom: 14px;
+}
+.n-info { background: var(--info-bg); color: var(--info); border: 1px solid #c5d5f8; }
+.n-ok   { background: var(--ok-bg);   color: var(--ok);   border: 1px solid #b0d8c0; }
+.n-warn { background: var(--warn-bg); color: var(--warn); border: 1px solid #e8ce70; }
+.n-err  { background: var(--err-bg);  color: var(--err);  border: 1px solid #f0c0c0; }
+
+/* ── TABLES ─────────────────────────────────────── */
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: .84rem; }
+th {
+  background: var(--ink); color: #f8f6f1;
+  padding: 9px 12px; text-align: left;
+  font-weight: 500; font-size: .78rem; letter-spacing: .04em;
+}
+td { padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+tr:last-child td { border-bottom: none; }
+tbody tr:hover td { background: var(--paper); }
+
+/* ── RADIO TOGGLE ───────────────────────────────── */
+.mode-toggle { display: flex; gap: 8px; margin-bottom: 18px; flex-wrap: wrap; }
+.mode-opt {
+  display: flex; align-items: center; gap: 8px;
+  padding: 9px 18px; border: 2px solid var(--border);
+  border-radius: 9px; cursor: pointer; transition: all .2s;
+  font-size: .88rem; user-select: none;
+}
+.mode-opt:hover { border-color: var(--accent); }
+.mode-opt.active { border-color: var(--accent); background: #fdf0f0; font-weight: 500; }
+.mode-opt input[type=radio] { accent-color: var(--accent); }
+
+/* ── AVAILABILITY GRID (half-hour blocks) ───────── */
+.avail-section { margin-bottom: 16px; }
+.avail-date-label {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-size: .82rem; font-weight: 700; color: var(--ink2);
+  background: var(--paper2); padding: 5px 12px; border-radius: 6px;
+  margin-bottom: 8px;
+}
+.avail-period-row { display: flex; gap: 8px; align-items: center; margin-bottom: 6px; flex-wrap: wrap; }
+.avail-period-label { font-size: .78rem; color: var(--muted); width: 36px; flex-shrink: 0; }
+.avail-blocks { display: flex; gap: 4px; flex-wrap: wrap; }
+.avail-block {
+  padding: 5px 10px; border: 1.5px solid var(--border);
+  border-radius: 6px; cursor: pointer; font-size: .78rem;
+  color: var(--muted); transition: all .12s; user-select: none;
+  white-space: nowrap;
+}
+.avail-block:hover { border-color: var(--teal); color: var(--teal); }
+.avail-block.on { background: var(--teal); border-color: var(--teal); color: #fff; font-weight: 500; }
+.quick-btns { display: flex; gap: 6px; margin-bottom: 8px; flex-wrap: wrap; }
+
+/* ── CALENDAR ───────────────────────────────────── */
+#cal-wrap {
+  border: 1px solid var(--border); border-radius: var(--r);
+  background: #fff; overflow: hidden; box-shadow: var(--shadow);
+}
+.cal-controls {
+  display: flex; gap: 10px; padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+  align-items: center; flex-wrap: wrap;
+  background: var(--paper);
+}
+.cal-legend { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; margin-left: auto; }
+.legend-item { display: flex; align-items: center; gap: 5px; font-size: .78rem; color: var(--muted); }
+.legend-dot { width: 12px; height: 12px; border-radius: 3px; flex-shrink: 0; }
+
+/* Calendar grid */
+.cal-grid-wrap { overflow-x: auto; }
+.cal-grid {
+  display: grid;
+  /* col 0: time label, col 1..N: dates */
+  min-width: 700px;
+}
+.cal-header-row {
+  display: contents;
+}
+.cal-time-header {
+  background: var(--paper2); padding: 8px 10px;
+  font-size: .74rem; color: var(--muted); text-align: right;
+  border-bottom: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  position: sticky; left: 0; z-index: 10;
+}
+.cal-date-header {
+  background: var(--ink); color: #f8f6f1;
+  padding: 8px 6px; text-align: center;
+  font-size: .78rem; font-weight: 500;
+  border-bottom: 1px solid #333;
+  border-right: 1px solid #444;
+}
+.cal-date-header .dow { font-size: .68rem; opacity: .6; }
+
+.cal-time-cell {
+  background: var(--paper2); padding: 4px 10px 4px 0;
+  font-size: .72rem; color: var(--muted); text-align: right;
+  border-bottom: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  position: sticky; left: 0; z-index: 5; vertical-align: top;
+  padding-top: 4px;
+}
+.cal-slot {
+  position: relative;
+  border-bottom: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  min-height: 44px; padding: 2px;
+  transition: background .15s;
+}
+/* Shade the 5 exam time windows lightly */
+.cal-slot.exam-window { background: var(--cal-slot-bg); }
+.cal-slot.lunch-break { background: repeating-linear-gradient(45deg,transparent,transparent 4px,rgba(0,0,0,.02) 4px,rgba(0,0,0,.02) 8px); }
+
+/* Events inside calendar cells */
+.cal-event {
+  border-radius: 5px; padding: 2px 6px;
+  font-size: .72rem; line-height: 1.4;
+  margin-bottom: 2px; font-weight: 500;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  cursor: default;
+}
+.cal-event.confirmed {
+  background: var(--cal-confirmed-bg); color: var(--cal-confirmed);
+  border-left: 3px solid var(--cal-confirmed);
+}
+.cal-event.avail {
+  background: var(--cal-avail-bg); color: var(--cal-avail);
+  border-left: 3px solid var(--cal-avail);
+}
+/* Availability heatmap overlay */
+.cal-slot .avail-count {
+  position: absolute; bottom: 2px; right: 3px;
+  font-size: .66rem; color: rgba(26,64,128,.5); font-weight: 600;
+}
+
+/* ── OVERVIEW GRID ──────────────────────────────── */
+.ov-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+  gap: 14px;
+}
+.ov-card { border: 1px solid var(--border); border-radius: var(--r); overflow: hidden; }
+.ov-head {
+  padding: 10px 15px; font-size: .88rem; font-weight: 500;
+  display: flex; justify-content: space-between; align-items: center;
+}
+.ov-head.confirmed { background: #163d28; color: #d4eddf; }
+.ov-head.pending   { background: #3d2e00; color: #fdf5dc; }
+.ov-head.empty     { background: var(--ink2); color: #f8f6f1; }
+.ov-body { padding: 12px 15px; font-size: .83rem; line-height: 1.75; }
+.ov-meta { font-size: .76rem; color: var(--muted); margin-bottom: 8px; opacity: .75; }
+
+/* ── PIN SCREEN ─────────────────────────────────── */
+.pin-screen { text-align: center; padding: 60px 20px; }
+.pin-screen h3 { font-family: 'Noto Serif TC', serif; font-size: 1.2rem; margin-bottom: 6px; }
+.pin-digits { display: flex; gap: 10px; justify-content: center; margin: 20px 0 10px; }
+.pin-digits input {
+  width: 52px; height: 52px; text-align: center;
+  font-size: 1.4rem; font-weight: 700;
+  border: 2px solid var(--border); border-radius: 10px;
+  outline: none; transition: border-color .2s;
+}
+.pin-digits input:focus { border-color: var(--accent); }
+
+/* ── ADMIN TABS ─────────────────────────────────── */
+.adm-tabs { display: flex; gap: 4px; margin-bottom: 20px; flex-wrap: wrap; }
+.adm-tab {
+  padding: 7px 18px; border-radius: 8px; cursor: pointer;
+  font-size: .85rem; font-weight: 500;
+  border: 1.5px solid var(--border); background: #fff; color: var(--muted);
+  transition: all .2s;
+}
+.adm-tab.active { background: var(--ink); color: #fff; border-color: var(--ink); }
+.adm-panel { display: none; }
+.adm-panel.active { display: block; }
+
+/* ── MODAL ──────────────────────────────────────── */
+.modal-overlay {
+  display: none; position: fixed; inset: 0;
+  background: rgba(0,0,0,.5); z-index: 500;
+  align-items: center; justify-content: center;
+}
+.modal-overlay.open { display: flex; }
+.modal-box {
+  background: #fff; border-radius: 14px; padding: 28px;
+  max-width: 480px; width: 92%; box-shadow: var(--shadow-lg);
+}
+.modal-box h3 { font-family: 'Noto Serif TC', serif; font-size: 1.1rem; margin-bottom: 12px; }
+.modal-footer { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
+
+/* ── MISC UTILS ─────────────────────────────────── */
+.divider { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
+.text-muted { color: var(--muted); font-size: .83rem; }
+.mt-1 { margin-top: 4px; }  .mt-2 { margin-top: 8px; }  .mt-3 { margin-top: 14px; }
+.mb-2 { margin-bottom: 8px; }  .mb-3 { margin-bottom: 14px; }
+.flex { display: flex; } .gap-2 { gap: 8px; } .gap-3 { gap: 12px; }
+.wrap { flex-wrap: wrap; }
+code { background: var(--paper2); padding: 1px 5px; border-radius: 4px; font-size: .82rem; }
+pre {
+  background: var(--ink); color: #a8e6cf;
+  padding: 16px; border-radius: 9px; font-size: .74rem;
+  line-height: 1.65; overflow: auto; max-height: 280px;
+  font-family: monospace; white-space: pre-wrap;
+}
+
+/* ── SPINNER & TOAST ────────────────────────────── */
+.spinner {
+  display: inline-block; width: 14px; height: 14px;
+  border: 2px solid rgba(255,255,255,.3); border-top-color: #fff;
+  border-radius: 50%; animation: spin .7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+#app-toast {
+  position: fixed; bottom: 22px; right: 22px;
+  background: var(--ink); color: #fff;
+  padding: 11px 18px; border-radius: 9px;
+  font-size: .87rem; z-index: 9999;
+  box-shadow: var(--shadow-lg); max-width: 300px;
+  transform: translateY(80px); opacity: 0;
+  transition: all .3s;
+}
+#app-toast.show { transform: translateY(0); opacity: 1; }
+#app-toast.ok   { border-left: 4px solid #4caf50; }
+#app-toast.err  { border-left: 4px solid #f44336; }
+#app-toast.warn { border-left: 4px solid #ff9800; }
+
+/* ── RESPONSIVE ─────────────────────────────────── */
+@media (max-width: 640px) {
+  .hdr-inner { padding: 0 14px; }
+  .nav-tab { padding: 6px 11px; font-size: .78rem; }
+  #app-main { padding: 18px 12px; }
+  .card { padding: 16px 18px; }
+}
+
+/* ── TEACHER SELECTOR CHIPS (student page) ──────── */
+.teacher-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 4px 11px; border: 1.5px solid var(--border);
+  border-radius: 999px; cursor: pointer; font-size: .8rem;
+  color: var(--muted); transition: all .15s; user-select: none;
+  background: #fff;
+}
+.teacher-chip:hover { border-color: var(--teal); color: var(--teal); }
+.teacher-chip.on { background: var(--teal); border-color: var(--teal); color: #fff; font-weight: 500; }
+.teacher-chip.default-member { border-style: solid; }
+.teacher-chip.default-member.on { background: var(--accent); border-color: var(--accent); }
+
+/* ── CALENDAR TEACHER MULTI-SELECT ──────────────── */
+#cal-teacher-panel {
+  background: var(--paper);
+  border-bottom: 1px solid var(--border);
+  padding: 10px 18px;
+}
+.cal-teacher-search {
+  padding: 6px 10px; border: 1.5px solid var(--border);
+  border-radius: 7px; font-size: .82rem; width: 200px;
+  background: #fff; outline: none; margin-bottom: 8px;
+}
+.cal-teacher-search:focus { border-color: var(--teal); }
+.cal-teacher-chips-wrap {
+  display: flex; flex-wrap: wrap; gap: 5px; max-height: 110px;
+  overflow-y: auto; padding-bottom: 4px;
+}
+.cal-teacher-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 10px; border: 1.5px solid var(--border);
+  border-radius: 999px; cursor: pointer; font-size: .78rem;
+  color: var(--muted); transition: all .12s; user-select: none;
+  background: #fff; white-space: nowrap;
+}
+.cal-teacher-chip:hover { border-color: var(--teal); color: var(--teal); }
+.cal-teacher-chip.on { background: var(--teal); border-color: var(--teal); color: #fff; font-weight: 500; }
+.dept-dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+.dept-dot.dept-home  { background: var(--accent); }
+.dept-dot.dept-ext   { background: var(--teal); }
+.dept-dot.dept-away  { background: var(--gold); }
+.cal-filter-summary {
+  font-size: .78rem; color: var(--teal); font-weight: 600; margin-top: 5px;
+}
+
+/* ── CALENDAR: all-avail highlight ──────────────── */
+.cal-slot.all-avail { background: rgba(26,96,96,.08) !important; }
+.cal-event.occupied {
+  background: #fde8e8; color: var(--err);
+  border-left: 3px solid var(--err);
+}
+</style>
+</head>
+<body>
+
+<header id="app-header">
+  <div class="hdr-inner">
+    <div class="app-logo">成大都計所<span>|</span>口試排程系統</div>
+    <nav class="nav-tabs">
+      <button class="nav-tab active" id="nav-student"  onclick="showPage('student')">🎓 填寫資料</button>
+      <button class="nav-tab"        id="nav-calendar" onclick="showPage('calendar')">📅 時間表</button>
+      <button class="nav-tab"        id="nav-overview" onclick="showPage('overview')">📊 總覽</button>
+      <button class="nav-tab"        id="nav-admin"    onclick="showPage('admin')">⚙️ 管理者</button>
+    </nav>
+    <div class="hdr-sync">
+      <div class="sync-dot local" id="sync-dot"></div>
+      <div class="sync-label" id="sync-lbl">本機模式</div>
+    </div>
+  </div>
+</header>
+
+<div id="app-main">
+
+<!-- PAGE 1: STUDENT ══════════════════════════════════ -->
+<div id="page-student" class="page active">
+  <div class="page-header">
+    <div>
+      <div class="page-title">填寫口試資料</div>
+      <div class="page-sub">選擇姓名後，填寫各口委的空閒時間，或填入已確定的口試時間</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">🎓 選擇姓名</div>
+    <div class="form-row">
+      <div class="form-group" style="max-width:260px">
+        <label>學生姓名</label>
+        <select id="stu-name-sel" onchange="onStudentSelect()">
+          <option value="">── 請選擇 ──</option>
+        </select>
+      </div>
+    </div>
+    <div class="flex gap-2 wrap mt-2" style="align-items:flex-end">
+      <div class="form-group" style="max-width:200px;margin:0">
+        <label>找不到名字？自行新增</label>
+        <input type="text" id="self-add-name" placeholder="輸入姓名">
+      </div>
+      <button class="btn btn-secondary btn-sm" onclick="selfAddStudent()">＋ 新增</button>
+    </div>
+  </div>
+
+  <div id="stu-form-wrap" style="display:none">
+    <div class="card">
+      <div class="card-title">📋 你的口委資料</div>
+      <div id="stu-committee-info"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">👨‍🏫 指導教授出席設定</div>
+      <label style="display:flex;align-items:center;gap:9px;cursor:pointer;font-size:.9rem">
+        <input type="checkbox" id="adv-attend-chk" style="width:17px;height:17px;accent-color:var(--accent)" onchange="onAdvisorAttendChange()">
+        <span>我的指導教授 <strong id="adv-name-lbl"></strong> 需要出席口試</span>
+      </label>
+    </div>
+
+    <div class="card">
+      <div class="card-title">📅 口試狀態</div>
+      <div class="mode-toggle">
+        <label class="mode-opt active" id="mode-pending-lbl">
+          <input type="radio" name="stu-mode" value="pending" id="mode-pending" onchange="setMode('pending')">
+          🔄 協調中
+        </label>
+        <label class="mode-opt" id="mode-confirmed-lbl">
+          <input type="radio" name="stu-mode" value="confirmed" id="mode-confirmed" onchange="setMode('confirmed')">
+          ✅ 已確定時間
+        </label>
+      </div>
+
+      <!-- PENDING -->
+      <div id="form-pending">
+        <div class="notice n-info" style="margin-bottom:14px">
+          💡 其他同學填過的老師時段會<strong>自動帶入</strong>作為預設值，你可以依實際情況調整後再儲存。
+        </div>
+        <div class="card-title" style="font-size:.9rem;border-bottom:none;padding-bottom:0;margin-bottom:6px">選擇要填寫的老師</div>
+        <p class="text-muted mb-3" style="font-size:.8rem">★ 標示為你的口委（預設已勾選）；可額外勾選其他老師</p>
+        <div id="teacher-selector-wrap" style="margin-bottom:16px"></div>
+
+        <div class="card-title" style="font-size:.9rem;border-bottom:none;padding-bottom:0;margin-bottom:4px">各老師可用時段</div>
+        <p class="text-muted mb-3" style="font-size:.8rem">每格 30 分鐘，點擊切換有空／沒空。每天旁邊可一鍵選取該天。</p>
+        <div id="avail-rows"></div>
+        <hr class="divider">
+        <div class="form-group mb-3">
+          <label>其他備註</label>
+          <textarea id="note-pending" rows="2" placeholder="例：某委員希望上午、地點偏好等"></textarea>
+        </div>
+        <button class="btn btn-primary" onclick="savePending()">💾 儲存並更新共享時段</button>
+      </div>
+
+      <!-- CONFIRMED -->
+      <div id="form-confirmed" style="display:none">
+        <div class="notice n-ok">✅ 恭喜確定時間！請填入詳細資訊。</div>
+        <div class="form-row">
+          <div class="form-group" style="max-width:200px">
+            <label>確定日期</label>
+            <input type="date" id="conf-date" min="2026-06-22" max="2026-07-03">
+          </div>
+          <div class="form-group" style="max-width:150px">
+            <label>開始時間</label>
+            <input type="time" id="conf-start" min="08:00" max="18:00" step="1800">
+          </div>
+          <div class="form-group" style="max-width:150px">
+            <label>結束時間</label>
+            <input type="time" id="conf-end" min="08:00" max="18:00" step="1800">
+          </div>
+          <div class="form-group">
+            <label>地點（選填）</label>
+            <input type="text" id="conf-location" placeholder="例：系館 301">
+          </div>
+        </div>
+        <div class="form-group mb-3">
+          <label style="margin-bottom:6px;display:block">確認出席的口委名單 <span class="text-muted">（勾選後時間表會標記為已佔用）</span></label>
+          <div id="conf-committee-wrap" style="display:flex;flex-direction:column;gap:4px"></div>
+        </div>
+        <div class="form-group mb-3">
+          <label>備註（選填）</label>
+          <textarea id="conf-note" rows="2"></textarea>
+        </div>
+        <button class="btn btn-primary" onclick="saveConfirmed()">💾 確認送出</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- PAGE 2: CALENDAR ══════════════════════════════════ -->
+<div id="page-calendar" class="page">
+  <div class="page-header">
+    <div>
+      <div class="page-title">口試時間表</div>
+      <div class="page-sub">6/22（一）至 7/3（五）</div>
+    </div>
+    <button class="btn btn-secondary btn-sm" onclick="renderCalendar()">🔄 重新整理</button>
+  </div>
+  <div id="cal-wrap">
+    <div class="cal-controls">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <span style="font-size:.82rem;font-weight:600;color:var(--muted)">顯示：</span>
+        <label style="display:flex;align-items:center;gap:5px;font-size:.82rem;cursor:pointer"><input type="radio" name="cal-view" value="both" checked onchange="renderCalendar()"> 全部</label>
+        <label style="display:flex;align-items:center;gap:5px;font-size:.82rem;cursor:pointer"><input type="radio" name="cal-view" value="confirmed" onchange="renderCalendar()"> 已確定口試</label>
+        <label style="display:flex;align-items:center;gap:5px;font-size:.82rem;cursor:pointer"><input type="radio" name="cal-view" value="avail" onchange="renderCalendar()"> 老師有空</label>
+      </div>
+      <div class="cal-legend">
+        <div class="legend-item"><div class="legend-dot" style="background:var(--cal-confirmed-bg);border:2px solid var(--cal-confirmed)"></div>已確定</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--cal-avail-bg);border:2px solid var(--cal-avail)"></div>有空</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#fde8e8;border:2px solid var(--err)"></div>已佔用</div>
+        <div class="legend-item"><div class="legend-dot" style="background:rgba(26,96,96,.15);border:1px solid var(--teal)"></div>全員有空</div>
+      </div>
+    </div>
+    <div id="cal-teacher-panel">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap">
+        <span style="font-size:.82rem;font-weight:600;color:var(--muted)">篩選老師（複選）：</span>
+        <input type="text" class="cal-teacher-search" id="cal-search" placeholder="搜尋..." oninput="filterCalTeacherList(this.value)">
+        <button class="btn btn-xs btn-secondary" onclick="clearCalTeachers()">✕ 清除</button>
+        <div class="cal-filter-summary" id="cal-filter-summary"></div>
+      </div>
+      <div class="cal-teacher-chips-wrap" id="cal-teacher-list"></div>
+      <div style="display:flex;gap:10px;margin-top:6px;font-size:.75rem;color:var(--muted)">
+        <span><span class="dept-dot dept-home" style="display:inline-block;margin-right:3px"></span>本系</span>
+        <span><span class="dept-dot dept-ext"  style="display:inline-block;margin-right:3px"></span>外系</span>
+        <span><span class="dept-dot dept-away" style="display:inline-block;margin-right:3px"></span>外地</span>
+      </div>
+    </div>
+    <div class="cal-grid-wrap">
+      <div class="cal-grid" id="cal-grid"></div>
+    </div>
+  </div>
+</div>
+
+<!-- PAGE 3: OVERVIEW ══════════════════════════════════ -->
+<div id="page-overview" class="page">
+  <div class="page-header">
+    <div><div class="page-title">排程總覽</div><div class="page-sub">所有同學的口試協調現況</div></div>
+    <div class="flex gap-2 wrap">
+      <button class="btn btn-teal btn-sm ov-filter-btn"      onclick="filterOverview('all')">全部</button>
+      <button class="btn btn-secondary btn-sm ov-filter-btn" onclick="filterOverview('confirmed')">✅ 已確定</button>
+      <button class="btn btn-secondary btn-sm ov-filter-btn" onclick="filterOverview('pending')">🔄 協調中</button>
+      <button class="btn btn-secondary btn-sm ov-filter-btn" onclick="filterOverview('empty')">⬜ 未填</button>
+      <button class="btn btn-secondary btn-sm"              onclick="initOverviewPage()">🔄 重新整理</button>
+    </div>
+  </div>
+  <div id="conflict-alert" class="notice n-err" style="display:none"><span>⚠️</span><span id="conflict-msg"></span></div>
+  <div class="card" id="confirmed-summary-card" style="display:none">
+    <div class="card-title">✅ 已確定時段一覽</div>
+    <div id="confirmed-summary"></div>
+  </div>
+  <div id="ov-grid" class="ov-grid"></div>
+</div>
+
+<!-- PAGE 4: ADMIN ══════════════════════════════════════ -->
+<div id="page-admin" class="page">
+  <div id="adm-lock">
+    <div class="pin-screen">
+      <div style="font-size:3rem;margin-bottom:14px">🔒</div>
+      <h3>管理者登入</h3>
+      <p class="text-muted mt-1">PIN 碼</p>
+      <div class="pin-digits">
+        <input type="password" maxlength="1" id="pa" oninput="pinNext(this,'pb')" onkeydown="pinKey(event,this,null,'pb')">
+        <input type="password" maxlength="1" id="pb" oninput="pinNext(this,'pc')" onkeydown="pinKey(event,this,'pa','pc')">
+        <input type="password" maxlength="1" id="pc" oninput="pinNext(this,'pd')" onkeydown="pinKey(event,this,'pb','pd')">
+        <input type="password" maxlength="1" id="pd" oninput="checkPin()"          onkeydown="pinKey(event,this,'pc',null)">
+      </div>
+      <p id="pin-err" style="color:#c0392b;font-size:.84rem;display:none">PIN 碼錯誤</p>
+    </div>
+  </div>
+
+  <div id="adm-content" style="display:none">
+    <div class="page-header">
+      <div><div class="page-title">管理者後台</div></div>
+      <button class="btn btn-secondary btn-sm" onclick="lockAdmin()">🔒 登出</button>
+    </div>
+    <div class="adm-tabs">
+      <div class="adm-tab active" onclick="showAdmTab('settings')">⚙️ 設定</div>
+      <div class="adm-tab"        onclick="showAdmTab('students')">🎓 學生</div>
+      <div class="adm-tab"        onclick="showAdmTab('teachers')">👨‍🏫 老師</div>
+      <div class="adm-tab"        onclick="showAdmTab('log');loadEditLog()">📋 編輯紀錄</div>
+      <div class="adm-tab"        onclick="showAdmTab('export')">📤 匯出</div>
+    </div>
+
+    <!-- Settings -->
+    <div id="adm-settings" class="adm-panel active">
+      <div class="card" style="background:linear-gradient(135deg,var(--ink) 0%,#2a2a40 100%);color:#f8f6f1;border:none">
+        <div style="font-family:'Noto Serif TC',serif;font-size:1.05rem;font-weight:700;color:#c9b07a;margin-bottom:8px">🚀 GitHub Pages 部署</div>
+        <p style="font-size:.84rem;opacity:.85;line-height:1.85">
+          1. 去 <a href="https://github.com" target="_blank" style="color:#c9b07a">github.com</a> 建立新 repository（如 defense-scheduler）<br>
+          2. 上傳此 HTML 檔，改名為 <code style="background:rgba(255,255,255,.15)">index.html</code><br>
+          3. Settings → Pages → Branch: main → Save<br>
+          4. 約 1 分鐘後生效：<code style="background:rgba(255,255,255,.15)">https://帳號.github.io/defense-scheduler/</code>
+        </p>
+      </div>
+      <div class="card">
+        <div class="card-title">🔗 Google Sheet 同步（選用）</div>
+        <div class="notice n-info">設定後資料同步至 Google Sheet，換裝置也不遺失。不設定則只存在目前瀏覽器。</div>
+        <div class="form-row" style="align-items:flex-end">
+          <div class="form-group"><label>Apps Script URL</label>
+            <input type="url" id="gas-url-input" placeholder="https://script.google.com/macros/s/...">
+          </div>
+        </div>
+        <div class="flex gap-2 mt-2 wrap">
+          <button class="btn btn-primary" onclick="saveGasUrl()">💾 儲存、測試並同步本機資料</button>
+          <button class="btn btn-gold"    onclick="initGasSheets()">🏗️ 初始化試算表</button>
+          <button class="btn btn-teal"    onclick="forceSyncToGas(this)">☁️ 強制同步目前資料</button>
+        </div>
+        <p class="text-muted mt-2" style="font-size:.78rem">若你已經在本機填過資料，設定 URL 後系統會先初始化試算表，再把目前瀏覽器中的資料推送到 Google Sheet。</p>
+      </div>
+      <div class="card">
+        <div class="card-title">📋 Apps Script 程式碼</div>
+        <p class="text-muted mb-3">擴充功能 → Apps Script → 貼上 → 部署為網路應用程式（執行身分：我，存取：所有人）</p>
+        <div style="position:relative">
+          <pre id="gas-script-pre"></pre>
+          <button class="btn btn-sm btn-gold" style="position:absolute;top:10px;right:10px" onclick="copyGasScript()">📋 複製</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">🔑 更改 PIN 碼</div>
+        <div class="form-row"><div class="form-group" style="max-width:180px">
+          <label>新 PIN（4位數字）</label>
+          <input type="password" id="new-pin-input" maxlength="4" placeholder="1234">
+        </div></div>
+        <button class="btn btn-secondary mt-2" onclick="changePin()">更改</button>
+      </div>
+    </div>
+
+    <!-- Students -->
+    <div id="adm-students" class="adm-panel">
+      <div class="card">
+        <div class="card-title">➕ 新增學生</div>
+        <div class="form-row">
+          <div class="form-group"><label>姓名</label><input type="text" id="adm-sn"></div>
+          <div class="form-group"><label>學號</label><input type="text" id="adm-si"></div>
+          <div class="form-group"><label>指導教授</label><input type="text" id="adm-sa"></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label>口委1</label><input type="text" id="adm-sc1"></div>
+          <div class="form-group"><label>口委2</label><input type="text" id="adm-sc2"></div>
+          <div class="form-group"><label>口委3</label><input type="text" id="adm-sc3"></div>
+          <div class="form-group"><label>口委4（若有）</label><input type="text" id="adm-sc4"></div>
+        </div>
+        <button class="btn btn-primary" onclick="admAddStudent()">➕ 新增</button>
+      </div>
+      <div class="card">
+        <div class="card-title">📋 學生名單 <span class="badge b-gold" id="adm-stu-count">0 人</span></div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>姓名</th><th>學號</th><th>指導教授</th><th>口委</th><th>替選</th><th>狀態</th><th></th></tr></thead>
+            <tbody id="adm-stu-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">📥 批次匯入 CSV</div>
+        <p class="text-muted mb-3">格式：<code>姓名,學號,指導教授,口委1,口委2,口委3,口委4</code></p>
+        <textarea id="adm-batch" style="width:100%;height:110px;padding:10px;border:1.5px solid var(--border);border-radius:8px;font-size:.82rem;font-family:monospace;resize:vertical"></textarea>
+        <button class="btn btn-primary mt-2" onclick="admBatchImport()">📥 匯入</button>
+      </div>
+    </div>
+
+    <!-- Teachers -->
+    <div id="adm-teachers" class="adm-panel">
+      <div class="card">
+        <div class="card-title">➕ 新增老師</div>
+        <div class="form-row">
+          <div class="form-group" style="max-width:200px"><label>姓名</label><input type="text" id="adm-tn"></div>
+          <div class="form-group" style="max-width:160px"><label>單位</label>
+            <select id="adm-td"><option value="本系">本系</option><option value="外系">外系</option><option value="外地">外地</option></select>
+          </div>
+        </div>
+        <button class="btn btn-primary" onclick="admAddTeacher()">➕ 新增</button>
+      </div>
+      <div class="card">
+        <div class="card-title">👨‍🏫 老師名單 <span class="badge b-gold" id="adm-tch-count">0 位</span></div>
+        <div id="adm-tch-list" style="display:flex;flex-wrap:wrap;gap:6px;min-height:50px;padding-top:4px"></div>
+      </div>
+    </div>
+
+    <!-- Edit Log -->
+    <div id="adm-log" class="adm-panel">
+      <div class="card">
+        <div class="card-title">📋 編輯紀錄 <span class="badge b-muted" id="log-count">0 筆</span></div>
+        <div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;align-items:center">
+          <input type="text" id="log-search" placeholder="搜尋學生或老師名字..."
+            style="padding:7px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:.85rem;width:220px;outline:none"
+            oninput="loadEditLog()">
+          <select id="log-action-filter" onchange="loadEditLog()"
+            style="padding:7px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:.85rem;background:var(--paper)">
+            <option value="all">全部動作</option>
+            <option value="add">新增有空</option>
+            <option value="remove">移除有空</option>
+          </select>
+          <button class="btn btn-secondary btn-sm" onclick="loadEditLog()">🔄 重新整理</button>
+          <button class="btn btn-danger btn-sm" onclick="clearLog()">🗑️ 清除紀錄</button>
+        </div>
+        <div class="notice n-info" style="font-size:.82rem">
+          📌 每次學生儲存時，系統會記錄「誰更新了哪個老師的哪些時段」。最多顯示 200 筆，最新的在最上面。
+        </div>
+        <div class="table-wrap mt-3">
+          <table>
+            <thead><tr><th>時間</th><th>學生</th><th>老師</th><th>動作</th><th>時段</th></tr></thead>
+            <tbody id="log-tbody">
+              <tr><td colspan="5" class="text-muted" style="text-align:center;padding:16px">點擊「重新整理」載入</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Export -->
+    <div id="adm-export" class="adm-panel">
+      <div class="card">
+        <div class="card-title">☁️ Google Sheet 同步</div>
+        <div class="notice n-info" style="font-size:.84rem">
+          如果 Google Sheet 是空的，但瀏覽器已有填寫資料，請按下方按鈕強制同步。同步完成後，到你的 Google Sheet 就能看到所有資料。
+        </div>
+        <button class="btn btn-gold" id="force-sync-btn" onclick="forceSyncToGas(this)">☁️ 強制同步到 Google Sheet</button>
+      </div>
+      <div class="card">
+        <div class="card-title">📤 匯出與管理</div>
+        <div style="display:flex;flex-direction:column;gap:12px;max-width:280px">
+          <button class="btn btn-teal" onclick="exportCSV()">📋 匯出學生填寫資料（CSV）</button>
+          <button class="btn btn-secondary" onclick="exportLogCSV()">📋 匯出編輯紀錄（CSV）</button>
+          <button class="btn btn-danger btn-sm" onclick="clearAllData()">🗑️ 清除所有填寫資料</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</div><!-- /app-main -->
+<div id="app-toast"></div>
+<div class="modal-overlay" id="confirm-modal">
+  <div class="modal-box">
+    <h3 id="modal-title">確認</h3>
+    <p id="modal-msg" style="color:var(--muted);font-size:.88rem;line-height:1.7"></p>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeConfirm()">取消</button>
+      <button class="btn btn-danger"    onclick="doConfirm()">確認</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════
+// MASTER DATA
+// ═══════════════════════════════════════════════════════
+
+const TEACHERS = [
+  {name:"王璽權",dept:"本系"},{name:"石豐宇",dept:"本系"},{name:"李子璋",dept:"本系"},
+  {name:"李俊霖",dept:"本系"},{name:"胡太山",dept:"本系"},{name:"張秀慈",dept:"本系"},
+  {name:"張學聖",dept:"本系"},{name:"陳秉立",dept:"本系"},{name:"曾憲嫻",dept:"本系"},
+  {name:"黃偉茹",dept:"本系"},{name:"葉如萍",dept:"本系"},{name:"趙子元",dept:"本系"},
+  {name:"鄭皓騰",dept:"本系"},{name:"閻永祺",dept:"本系"},{name:"顧嘉安",dept:"本系"},
+  {name:"林漢良",dept:"外系"},{name:"沈宗緯",dept:"外系"},{name:"傳強",dept:"外系"},
+  {name:"張珩",dept:"外系"},{name:"盧紀邦",dept:"外系"},{name:"郭佩棻",dept:"外系"},
+  {name:"林峰田",dept:"外系"},{name:"古宜靈",dept:"外系"},{name:"孔憲法",dept:"外系"},
+  {name:"林曉葳",dept:"外地"},{name:"謝玉玲",dept:"外地"},{name:"黃國慶",dept:"外地"},
+  {name:"蘇淑娟",dept:"外地"},{name:"張慈佳",dept:"外地"},{name:"夏皓清",dept:"外地"},
+  {name:"張桂鳳",dept:"外地"},{name:"白仁德",dept:"外地"},{name:"洪鴻智",dept:"外地"},
+  {name:"衛萬明",dept:"外地"},{name:"陳維斌",dept:"外地"},{name:"陳德容",dept:"外地"},
+  {name:"廖晉賢",dept:"外地"},{name:"吳杰穎",dept:"外地"},{name:"徐逸祥",dept:"外地"},
+  {name:"石婉瑜",dept:"外地"},{name:"李俊鴻",dept:"外地"},{name:"黃家耀",dept:"外地"},
+  {name:"陳怡伶",dept:"外地"},{name:"林楨家",dept:"外地"},{name:"張學孔",dept:"外地"},
+  {name:"洪于婷",dept:"外地"},{name:"曾碩文",dept:"外地"},{name:"董建宏",dept:"外地"},
+  {name:"徐銘謙",dept:"外地"},{name:"余政達",dept:"外地"},{name:"張簡樂仁",dept:"外地"},
+  {name:"趙正義",dept:"外地"},{name:"李素馨",dept:"外地"},{name:"詹士樑",dept:"外地"},
+  {name:"戴佐敏",dept:"外地"},{name:"李宇欣",dept:"外地"},{name:"賴碧瑩",dept:"外地"},
+  {name:"陳姿伶",dept:"外地"},{name:"陳彥仲",dept:"外地"},
+];
+
+const STUDENTS = [
+  {name:"趙禹碩",id:"P26131084",advisor:"石豐宇",c1:"李子璋",c2:"閻永祺",c3:"胡太山",c4:"",alt:["戴佐敏","李宇欣","胡太山","陳彥仲","趙正義"]},
+  {name:"葉煥宇",id:"P26131042",advisor:"李子璋",c1:"顧嘉安",c2:"張秀慈",c3:"葉如萍",c4:"",alt:["石豐宇","鄭皓騰","葉如萍","曾憲嫻"]},
+  {name:"蔡智昇",id:"P26131068",advisor:"李子璋",c1:"石豐宇",c2:"顧嘉安",c3:"李俊霖",c4:"",alt:["黃家耀","郭佩棻","顧嘉安","葉如萍","鄭皓騰"]},
+  {name:"賴威蓁",id:"P26131076",advisor:"李子璋",c1:"顧嘉安",c2:"王璽權",c3:"曾憲嫻",c4:"",alt:["陳彥仲","石豐宇","趙子元","張秀慈","李俊霖"]},
+  {name:"張芳瑜",id:"P26131107",advisor:"李子璋",c1:"石豐宇",c2:"顧嘉安",c3:"葉如萍",c4:"",alt:["黃家耀","郭佩棻","顧嘉安","李俊霖","葉如萍","鄭皓騰"]},
+  {name:"黃嬿容",id:"P26134197",advisor:"李子璋",c1:"鄭皓騰",c2:"王璽權",c3:"石豐宇",c4:"",alt:["沈宗緯","顧嘉安","石豐宇","葉如萍","陳彥仲"]},
+  {name:"楊士弘",id:"P26134016",advisor:"李子璋",c1:"張學聖",c2:"林漢良",c3:"趙子元",c4:"",alt:["林峰田","鄭皓騰","古宜靈","胡太山","石豐宇"]},
+  {name:"廖珮雯",id:"P26131018",advisor:"李俊霖",c1:"鄭皓騰",c2:"趙子元",c3:"陳秉立",c4:"",alt:["詹士樑","李俊鴻","陳維斌","鄭皓騰","陳秉立","胡太山"]},
+  {name:"林芷妤",id:"P26131034",advisor:"李俊霖",c1:"李子璋",c2:"顧嘉安",c3:"胡太山",c4:"",alt:["詹士樑","陳維斌","顧嘉安","趙子元","孔憲法"]},
+  {name:"林宜萱",id:"P26124320",advisor:"張秀慈",c1:"胡太山",c2:"陳秉立",c3:"黃偉茹",c4:"",alt:["林曉葳","謝玉玲","陳秉立","黃偉茹"]},
+  {name:"江懿瑄",id:"P26124338",advisor:"張秀慈",c1:"趙子元",c2:"黃偉茹",c3:"鄭皓騰",c4:"李俊霖",alt:["蘇淑娟","張慈佳","李俊霖","陳秉立","吳振發"]},
+  {name:"盧貞卉",id:"P26134210",advisor:"張秀慈",c1:"陳秉立",c2:"黃偉茹",c3:"李子璋",c4:"",alt:["陳德容","盧紀邦","黃偉茹","李子璋","曾憲嫻","胡太山"]},
+  {name:"吳子宜",id:"P26134294",advisor:"張秀慈",c1:"黃偉茹",c2:"陳秉立",c3:"李子璋",c4:"",alt:["徐銘謙","林曉葳","曾憲嫻","陳秉立","李子璋","葉如萍"]},
+  {name:"徐崇維",id:"P26131092",advisor:"張學聖",c1:"李俊霖",c2:"顧嘉安",c3:"閻永祺",c4:"",alt:["洪鴻智","顧嘉安","閻永祺","王璽權","李子璋"]},
+  {name:"沈妙靜",id:"P26134163",advisor:"張學聖",c1:"李俊霖",c2:"顧嘉安",c3:"趙子元",c4:"",alt:["洪鴻智","顧嘉安","趙子元","閻永祺","王璽權","李子璋"]},
+  {name:"林全宗",id:"P26131026",advisor:"陳秉立",c1:"葉如萍",c2:"閻永祺",c3:"王璽權",c4:"",alt:["張桂鳳","夏皓清","張學孔","王璽權","李俊霖"]},
+  {name:"孫沂寬",id:"P26121089",advisor:"陳秉立",c1:"黃偉茹",c2:"鄭皓騰",c3:"張秀慈",c4:"",alt:["林曉葳","謝玉玲","李俊霖","曾碩文"]},
+  {name:"王楚中",id:"P26121013",advisor:"陳彥仲",c1:"石豐宇",c2:"王璽權",c3:"李子璋",c4:"",alt:["董建宏","林楨家","賴碧瑩"]},
+  {name:"陳圓蓁",id:"P26134147",advisor:"曾憲嫻",c1:"鄭皓騰",c2:"王璽權",c3:"黃偉茹",c4:"",alt:["黃國慶","白仁德","胡太山","趙子元","李子璋"]},
+  {name:"劉佩宜",id:"P26134121",advisor:"黃偉茹",c1:"張秀慈",c2:"趙子元",c3:"鄭皓騰",c4:"",alt:["陳德容","陳怡伶","張秀慈","趙子元","鄭皓騰","陳秉立"]},
+  {name:"申翊萱",id:"P26134032",advisor:"趙子元",c1:"張學聖",c2:"黃偉茹",c3:"陳秉立",c4:"",alt:["張簡樂仁","余政達","張學聖","陳秉立","李子璋","張秀慈"]},
+  {name:"蔡亞蓁",id:"P26134260",advisor:"趙子元",c1:"鄭皓騰",c2:"張秀慈",c3:"陳秉立",c4:"",alt:["曾碩文","張秀慈","李俊霖","張學聖","李子璋","陳秉立"]},
+  {name:"林盈漾",id:"P26134040",advisor:"鄭皓騰",c1:"李子璋",c2:"趙子元",c3:"石豐宇",c4:"",alt:["閻永祺","郭佩棻","顧嘉安","王璽權","葉如萍"]},
+  {name:"熊孝慈",id:"P26134171",advisor:"鄭皓騰",c1:"石豐宇",c2:"趙子元",c3:"葉如萍",c4:"",alt:["白仁德","石豐宇","李子璋","顧嘉安","李俊霖","張學聖"]},
+  {name:"劉冠宜",id:"P26134228",advisor:"鄭皓騰",c1:"李子璋",c2:"顧嘉安",c3:"陳秉立",c4:"",alt:["王璽權","葉如萍","李子璋","顧嘉安","陳秉立","石豐宇"]},
+  {name:"卓敬庭",id:"P26134317",advisor:"鄭皓騰",c1:"趙子元",c2:"曾憲嫻",c3:"陳秉立",c4:"",alt:["張珩","洪于婷","趙子元","王璽權","張秀慈","陳秉立"]},
+  {name:"陳美靜",id:"P26134082",advisor:"閻永祺",c1:"胡太山",c2:"李子璋",c3:"張學聖",c4:"",alt:["白仁德","衛萬明","林楨家","孔憲法","張學聖"]},
+  {name:"陳姸霖",id:"P26134074",advisor:"顧嘉安",c1:"李俊霖",c2:"張學聖",c3:"閻永祺",c4:"",alt:["黃國慶","李子璋","王璽權","胡太山","趙子元"]},
+  {name:"陳柏睿",id:"P26134090",advisor:"顧嘉安",c1:"李俊霖",c2:"王璽權",c3:"閻永祺",c4:"",alt:["廖晉賢","陳秉立","鄭皓騰","趙子元","張學聖","閻永祺"]},
+  {name:"王玟涵",id:"P26134155",advisor:"顧嘉安",c1:"李俊霖",c2:"胡太山",c3:"王璽權",c4:"",alt:["陳姿伶","黃國慶","張學聖","徐逸祥","石婉瑜"]},
+  {name:"吳雨瑄",id:"P26134286",advisor:"顧嘉安",c1:"張學聖",c2:"李俊霖",c3:"鄭皓騰",c4:"",alt:["洪鴻智","吳杰穎","陳姿伶","徐逸祥"]},
+];
+
+// Exam date range: 2026-06-22 (Mon) to 2026-07-03 (Fri), weekdays only
+const EXAM_DATES = (() => {
+  const dates = [];
+  const start = new Date('2026-06-22');
+  const end   = new Date('2026-07-03');
+  for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+    if (d.getDay() !== 0 && d.getDay() !== 6) dates.push(new Date(d));
+  }
+  return dates;
+})();
+
+// Hours shown on calendar (8:00 – 18:00)
+const CAL_HOURS = [8,9,10,11,12,13,14,15,16,17];
+
+// The 5 fixed exam slots (for reference/coloring)
+const EXAM_SLOTS = [
+  {label:'09:00–10:30', start:9,  end:10.5},
+  {label:'10:30–12:00', start:10.5,end:12},
+  {label:'13:30–15:00', start:13.5,end:15},
+  {label:'15:00–16:30', start:15,  end:16.5},
+  {label:'16:30–18:00', start:16.5,end:18},
+];
+
+function dateKey(d) {
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+function fmtDateShort(d) {
+  const days = ['日','一','二','三','四','五','六'];
+  return `${d.getMonth()+1}/${d.getDate()}（${days[d.getDay()]}）`;
+}
+function fmtDateFull(d) {
+  return `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`;
+}
+
+// ═══════════════════════════════════════════════════════
+// STATE & STORAGE
+// ═══════════════════════════════════════════════════════
+
+const STATE = {
+  gasUrl:   '',
+  adminPin: '1234',
+  teachers: [],
+  students: [],
+  stuData:  {},    // per-student form data
+  teacherAvail: {},// SHARED: {teacherName: {slots: Set/Array, lastEditedBy, lastEditedAt}}
+  editLog:  [],    // [{ts, student, teacher, action:'add'|'remove', slots:[]}]
+};
+
+function stateInit() {
+  STATE.gasUrl   = normalizeGasUrl(localStorage.getItem('gasUrl') || '');
+  STATE.adminPin = localStorage.getItem('adminPin') || '1234';
+
+  const extraTeachers = JSON.parse(localStorage.getItem('extraTeachers') || '[]');
+  const extraStudents = JSON.parse(localStorage.getItem('extraStudents') || '[]');
+  STATE.teachers = [...TEACHERS, ...extraTeachers.filter(t => !TEACHERS.find(x => x.name === t.name))];
+  STATE.students = [...STUDENTS, ...extraStudents.filter(s => !STUDENTS.find(x => x.name === s.name))];
+
+  STATE.stuData      = JSON.parse(localStorage.getItem('stuData')       || '{}');
+  STATE.teacherAvail = JSON.parse(localStorage.getItem('teacherAvail')  || '{}');
+  STATE.editLog      = JSON.parse(localStorage.getItem('editLog')       || '[]');
+}
+
+// ── Persisting ──────────────────────────────────────────
+function saveLocal() {
+  localStorage.setItem('stuData',      JSON.stringify(STATE.stuData));
+  localStorage.setItem('teacherAvail', JSON.stringify(STATE.teacherAvail));
+  localStorage.setItem('editLog',      JSON.stringify(STATE.editLog));
+}
+
+// ── Student data ────────────────────────────────────────
+function getStuData(name) { return STATE.stuData[name] || null; }
+
+function stampData(data) {
+  return { ...data, updatedAt: new Date().toISOString() };
+}
+
+async function setStuData(name, data) {
+  const stamped = stampData(data);
+  STATE.stuData[name] = stamped;
+  saveLocal();
+  if (!STATE.gasUrl) return { ok: true, mode: 'local' };
+  return await gasCall('saveStuData', { name, payload: JSON.stringify(stamped) });
+}
+
+// ── Shared teacher availability ─────────────────────────
+// Returns current known slots for a teacher (Array of slot keys)
+function getTeacherAvail(teacher) {
+  return (STATE.teacherAvail[teacher] || {}).slots || [];
+}
+
+// Diff old vs new slots, update shared table, write log entries
+async function updateTeacherAvail(studentName, teacher, newSlots) {
+  const oldSlots = new Set(getTeacherAvail(teacher));
+  const newSet   = new Set(newSlots);
+  const now = new Date().toISOString();
+
+  const added   = newSlots.filter(s => !oldSlots.has(s));
+  const removed = [...oldSlots].filter(s => !newSet.has(s));
+
+  // Update shared table (latest wins)
+  STATE.teacherAvail[teacher] = {
+    slots: [...newSet],
+    lastEditedBy: studentName,
+    lastEditedAt: now,
+  };
+
+  // Append log entries
+  const logEntries = [
+    added.length   ? { ts: now, student: studentName, teacher, action: 'add',    slots: added }   : null,
+    removed.length ? { ts: now, student: studentName, teacher, action: 'remove', slots: removed } : null,
+  ].filter(Boolean);
+
+  STATE.editLog.push(...logEntries);
+  saveLocal();
+
+  if (!STATE.gasUrl) return { ok: true, mode: 'local' };
+
+  const r1 = await gasCall('saveTeacherAvail', { teacher, payload: JSON.stringify(STATE.teacherAvail[teacher]) });
+  let r2 = { ok: true };
+  if (logEntries.length) {
+    r2 = await gasCall('appendLog', { payload: JSON.stringify(logEntries) });
+  }
+  return (r1?.ok !== false && r2?.ok !== false)
+    ? { ok: true }
+    : { ok: false, msg: r1?.msg || r2?.msg || '老師時段同步失敗' };
+}
+
+// Batch update all teachers from a save operation
+async function syncAvailabilityFromForm(studentName, availabilityObj) {
+  const results = [];
+  for (const [teacher, data] of Object.entries(availabilityObj)) {
+    results.push(await updateTeacherAvail(studentName, teacher, data.slots || []));
+  }
+  return results.every(r => r?.ok !== false) ? { ok: true } : { ok: false, msg: '部分老師時段同步失敗' };
+}
+
+// ── GAS ────────────────────────────────────────────────
+const GAS_POST_ACTIONS = new Set(['saveStuData', 'saveTeacherAvail', 'appendLog']);
+let gasJsonpSeq = 0;
+
+function normalizeGasUrl(url) {
+  return String(url || '').trim().replace(/\/dev(\?.*)?$/, '/exec');
+}
+
+function buildQuery(action, params = {}, includeCallback = false, callbackName = '') {
+  const qs = new URLSearchParams({ action });
+  if (includeCallback) qs.set('callback', callbackName);
+  Object.entries(params).forEach(([k, v]) =>
+    qs.set(k, typeof v === 'object' ? JSON.stringify(v) : String(v))
+  );
+  return qs;
+}
+
+function gasJsonp(action, params = {}, timeoutMs = 15000) {
+  return new Promise((resolve, reject) => {
+    const callbackName = `__gas_jsonp_${Date.now()}_${gasJsonpSeq++}`;
+    const qs = buildQuery(action, params, true, callbackName);
+    const script = document.createElement('script');
+    const sep = STATE.gasUrl.includes('?') ? '&' : '?';
+    let done = false;
+
+    const cleanup = () => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      try { delete window[callbackName]; } catch(e) { window[callbackName] = undefined; }
+      script.remove();
+    };
+
+    const timer = setTimeout(() => {
+      cleanup();
+      reject(new Error('Apps Script 讀取逾時。請確認部署權限為「所有人」且網址是 /exec。'));
+    }, timeoutMs);
+
+    window[callbackName] = data => {
+      cleanup();
+      resolve(data);
+    };
+    script.onerror = () => {
+      cleanup();
+      reject(new Error('Apps Script 讀取失敗。常見原因：未部署為網路應用程式、權限不是所有人、或 URL 貼錯。'));
+    };
+    script.src = STATE.gasUrl + sep + qs.toString();
+    document.head.appendChild(script);
+  });
+}
+
+async function gasPost(action, params = {}) {
+  const body = buildQuery(action, params, false);
+  await fetch(STATE.gasUrl, {
+    method: 'POST',
+    mode: 'no-cors',
+    body,
+  });
+  // no-cors response is opaque; use read-back verification in forceSyncToGas().
+  return { ok: true, mode: 'posted' };
+}
+
+async function gasCall(action, params = {}) {
+  if (!STATE.gasUrl) return localGasFallback(action, params);
+
+  try {
+    const paramSize = buildQuery(action, params, false).toString().length;
+    const mustPost = GAS_POST_ACTIONS.has(action) || paramSize > 1500;
+    const r = mustPost ? await gasPost(action, params) : await gasJsonp(action, params);
+    if (r?.ok === false) throw new Error(r.msg || 'Apps Script 回傳失敗');
+    return r || { ok: true };
+  } catch (e) {
+    console.error('[GAS sync failed]', action, e);
+    setSyncIndicator(false);
+    return { ok: false, msg: e.message || String(e), error: true };
+  }
+}
+
+function localGasFallback(action, p) {
+  switch (action) {
+    case 'ping': return { ok: true, mode: 'local' };
+    case 'init': return { ok: true };
+
+    case 'getAllStuData': return { data: STATE.stuData };
+    case 'saveStuData':
+      STATE.stuData[p.name] = JSON.parse(p.payload);
+      saveLocal(); return { ok: true };
+
+    case 'getTeacherAvail': return { data: STATE.teacherAvail };
+    case 'saveTeacherAvail':
+      STATE.teacherAvail[p.teacher] = JSON.parse(p.payload);
+      saveLocal(); return { ok: true };
+
+    case 'getEditLog': return { data: STATE.editLog };
+    case 'appendLog': {
+      const entries = JSON.parse(p.payload || '[]');
+      STATE.editLog.push(...entries);
+      // Keep last 2000 entries to avoid localStorage overflow
+      if (STATE.editLog.length > 2000) STATE.editLog = STATE.editLog.slice(-2000);
+      saveLocal(); return { ok: true };
+    }
+    case 'clearLog':
+      STATE.editLog = []; saveLocal(); return { ok: true };
+
+    case 'getTeachers': return { data: JSON.parse(localStorage.getItem('extraTeachers') || '[]') };
+    case 'getStudents': return { data: JSON.parse(localStorage.getItem('extraStudents') || '[]') };
+
+    case 'addTeacher': {
+      addLocalTeacher({ name: p.name, dept: p.dept || '' });
+      return { ok: true };
+    }
+    case 'deleteTeacher': {
+      removeLocalTeacher(p.name);
+      return { ok: true };
+    }
+    case 'addStudent': {
+      addLocalStudent({ name:p.name, id:p.id||'', advisor:p.advisor||'',
+        c1:p.c1||'', c2:p.c2||'', c3:p.c3||'', c4:p.c4||'', alt:[] });
+      return { ok: true };
+    }
+    case 'deleteStudent': {
+      removeLocalStudent(p.name);
+      return { ok: true };
+    }
+    case 'clearAll':
+      STATE.stuData = {}; STATE.teacherAvail = {}; STATE.editLog = [];
+      saveLocal(); return { ok: true };
+
+    default: return { ok: false, msg: 'unknown local action' };
+  }
+}
+
+function addLocalTeacher(t) {
+  if (!t?.name) return;
+  const extras = JSON.parse(localStorage.getItem('extraTeachers') || '[]');
+  if (!TEACHERS.find(x => x.name === t.name) && !extras.find(x => x.name === t.name)) {
+    extras.push({ name: t.name, dept: t.dept || '' });
+    localStorage.setItem('extraTeachers', JSON.stringify(extras));
+  }
+  if (!STATE.teachers.find(x => x.name === t.name)) STATE.teachers.push({ name: t.name, dept: t.dept || '' });
+}
+
+function removeLocalTeacher(name) {
+  const extras = JSON.parse(localStorage.getItem('extraTeachers') || '[]').filter(t => t.name !== name);
+  localStorage.setItem('extraTeachers', JSON.stringify(extras));
+  STATE.teachers = STATE.teachers.filter(t => t.name !== name);
+}
+
+function addLocalStudent(s) {
+  if (!s?.name) return;
+  const stu = { name:s.name, id:s.id||'', advisor:s.advisor||'',
+    c1:s.c1||'', c2:s.c2||'', c3:s.c3||'', c4:s.c4||'', alt:s.alt||[] };
+  const extras = JSON.parse(localStorage.getItem('extraStudents') || '[]');
+  if (!STUDENTS.find(x => x.name === stu.name) && !extras.find(x => x.name === stu.name)) {
+    extras.push(stu);
+    localStorage.setItem('extraStudents', JSON.stringify(extras));
+  }
+  if (!STATE.students.find(x => x.name === stu.name)) STATE.students.push(stu);
+}
+
+function removeLocalStudent(name) {
+  const extras = JSON.parse(localStorage.getItem('extraStudents') || '[]').filter(s => s.name !== name);
+  localStorage.setItem('extraStudents', JSON.stringify(extras));
+  STATE.students = STATE.students.filter(s => s.name !== name);
+}
+
+function mergeRemoteLists(remoteTeachers = [], remoteStudents = []) {
+  remoteTeachers.forEach(t => addLocalTeacher({ name: t.name, dept: t.dept || '' }));
+  remoteStudents.forEach(s => addLocalStudent(s));
+}
+
+function hasLocalSyncData() {
+  return Object.keys(STATE.stuData).length > 0 ||
+         Object.keys(STATE.teacherAvail).length > 0 ||
+         STATE.editLog.length > 0 ||
+         JSON.parse(localStorage.getItem('extraStudents') || '[]').length > 0 ||
+         JSON.parse(localStorage.getItem('extraTeachers') || '[]').length > 0;
+}
+
+function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
+
+async function fetchAllFromGas() {
+  const [sd, td, ld, ts, ss] = await Promise.all([
+    gasCall('getAllStuData'),
+    gasCall('getTeacherAvail'),
+    gasCall('getEditLog'),
+    gasCall('getTeachers'),
+    gasCall('getStudents'),
+  ]);
+  if ([sd, td, ld, ts, ss].some(r => r?.ok === false)) {
+    const bad = [sd, td, ld, ts, ss].find(r => r?.ok === false);
+    throw new Error(bad?.msg || '讀取 Google Sheet 失敗');
+  }
+  return {
+    stuData: sd?.data || {},
+    teacherAvail: td?.data || {},
+    editLog: Array.isArray(ld?.data) ? ld.data : [],
+    teachers: Array.isArray(ts?.data) ? ts.data : [],
+    students: Array.isArray(ss?.data) ? ss.data : [],
+  };
+}
+
+async function loadAllFromGas() {
+  const remote = await fetchAllFromGas();
+  // Remote data should be visible on new devices, but do not erase local-only keys.
+  STATE.stuData      = { ...remote.stuData, ...STATE.stuData };
+  STATE.teacherAvail = { ...remote.teacherAvail, ...STATE.teacherAvail };
+  if (remote.editLog.length > STATE.editLog.length) STATE.editLog = remote.editLog;
+  mergeRemoteLists(remote.teachers, remote.students);
+  saveLocal();
+  return remote;
+}
+
+async function pushAllLocalToGas() {
+  if (!STATE.gasUrl) return { ok: false, msg: '請先設定 Apps Script URL' };
+
+  const init = await gasCall('init');
+  if (init?.ok === false) return init;
+
+  for (const [name, data] of Object.entries(STATE.stuData)) {
+    const r = await gasCall('saveStuData', { name, payload: JSON.stringify(data) });
+    if (r?.ok === false) return r;
+  }
+  for (const [teacher, data] of Object.entries(STATE.teacherAvail)) {
+    const r = await gasCall('saveTeacherAvail', { teacher, payload: JSON.stringify(data) });
+    if (r?.ok === false) return r;
+  }
+
+  const extraTeachers = JSON.parse(localStorage.getItem('extraTeachers') || '[]');
+  const extraStudents = JSON.parse(localStorage.getItem('extraStudents') || '[]');
+  for (const t of extraTeachers) {
+    const r = await gasCall('addTeacher', { name: t.name, dept: t.dept || '' });
+    if (r?.ok === false) return r;
+  }
+  for (const s of extraStudents) {
+    const r = await gasCall('addStudent', s);
+    if (r?.ok === false) return r;
+  }
+
+  if (STATE.editLog.length > 0) {
+    const r = await gasCall('appendLog', { payload: JSON.stringify(STATE.editLog) });
+    if (r?.ok === false) return r;
+  }
+
+  // Give Apps Script a moment to finish no-cors POST writes, then read back via JSONP.
+  await sleep(900);
+  const remote = await fetchAllFromGas();
+
+  const missingStu = Object.keys(STATE.stuData).filter(name => !remote.stuData[name]);
+  const missingAvail = Object.keys(STATE.teacherAvail).filter(name => !remote.teacherAvail[name]);
+
+  if (missingStu.length || missingAvail.length) {
+    return {
+      ok: false,
+      msg: `已送出，但回讀驗證不完整：缺學生 ${missingStu.length} 筆、老師時段 ${missingAvail.length} 筆。請確認 Apps Script 部署權限。`
+    };
+  }
+
+  mergeRemoteLists(remote.teachers, remote.students);
+  return { ok: true, remote };
+}
+
+// ── GAS Script ─────────────────────────────────────────
+function GAS_SCRIPT() { return `// 口試排程系統 - Google Apps Script
+// 部署：Google Sheet → 擴充功能 → Apps Script → 新增部署 → 網路應用程式
+// 執行身分：我的帳戶　　存取：所有人
+// 若這不是從 Google Sheet 內建立的 Apps Script，請填入你的試算表 ID。
+const SPREADSHEET_ID = '';
+
+function doGet(e) {
+  return route_(e, true);
+}
+
+function doPost(e) {
+  return route_(e, false);
+}
+
+function route_(e, allowJsonp) {
+  const p = e && e.parameter ? e.parameter : {};
+  let result;
+  try {
+    result = handleAction_(p.action, p);
+  } catch (err) {
+    result = { ok:false, msg: String(err && err.stack ? err.stack : err) };
+  }
+  return output_(result, allowJsonp ? p.callback : '');
+}
+
+function output_(obj, callback) {
+  const json = JSON.stringify(obj || {ok:true});
+  if (callback) {
+    // Front-end JSONP callback names look like __gas_jsonp_...; reject unsafe names.
+    if (!/^[A-Za-z_$][0-9A-Za-z_$]*(\.[A-Za-z_$][0-9A-Za-z_$]*)*$/.test(callback)) {
+      return ContentService.createTextOutput(JSON.stringify({ok:false,msg:'invalid callback'}))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+    return ContentService.createTextOutput(callback + '(' + json + ');')
+      .setMimeType(ContentService.MimeType.JAVASCRIPT);
+  }
+  return ContentService.createTextOutput(json).setMimeType(ContentService.MimeType.JSON);
+}
+
+function handleAction_(action, p) {
+  switch(action) {
+    case 'ping':             return {ok:true, ts:new Date().toISOString()};
+    case 'init':             return initSheets_();
+    case 'getAllStuData':    return {ok:true, data:getSheetJSON_('學生填寫資料')};
+    case 'saveStuData':      return upsertRow_('學生填寫資料', p.name, p.payload);
+    case 'getTeacherAvail':  return {ok:true, data:getSheetJSON_('老師共享時段')};
+    case 'saveTeacherAvail': return upsertRow_('老師共享時段', p.teacher, p.payload);
+    case 'getEditLog':       return {ok:true, data:getLogRows_()};
+    case 'appendLog':        return appendLogRows_(p.payload);
+    case 'clearLog':         return clearSheet_('編輯紀錄');
+    case 'getTeachers':      return {ok:true, data:getTeachers_()};
+    case 'getStudents':      return {ok:true, data:getStudents_()};
+    case 'addTeacher':       return appendUniqueRow_('老師名單', ['姓名','單位'], [p.name, p.dept || '']);
+    case 'deleteTeacher':    return delRow_('老師名單', p.name);
+    case 'addStudent':       return addStudent_(p);
+    case 'deleteStudent':    return delRow_('學生名單', p.name);
+    case 'clearAll':         return clearAll_();
+    default:                 return {ok:false, msg:'unknown action: ' + action};
+  }
+}
+
+function getSS_() {
+  const ss = SPREADSHEET_ID
+    ? SpreadsheetApp.openById(SPREADSHEET_ID)
+    : SpreadsheetApp.getActiveSpreadsheet();
+  if (!ss) throw new Error('找不到試算表。請從 Google Sheet 內開啟「擴充功能 → Apps Script」，或在程式碼最上方填入 SPREADSHEET_ID。');
+  return ss;
+}
+
+function initSheets_() {
+  ensureSheet_('學生填寫資料', ['索引鍵','資料JSON','最後更新']);
+  ensureSheet_('老師共享時段', ['索引鍵','資料JSON','最後更新']);
+  ensureSheet_('編輯紀錄',    ['時間','學生','老師','動作','時段']);
+  ensureSheet_('老師名單',    ['姓名','單位']);
+  ensureSheet_('學生名單',    ['姓名','學號','指導教授','口委1','口委2','口委3','口委4']);
+  return {ok:true};
+}
+
+function ensureSheet_(name, headers) {
+  const ss = getSS_();
+  let sh = ss.getSheetByName(name);
+  if (!sh) {
+    sh = ss.insertSheet(name);
+    sh.appendRow(headers);
+    sh.getRange(1,1,1,headers.length)
+      .setFontWeight('bold').setBackground('#1c1c2e').setFontColor('#ffffff');
+  } else if (sh.getLastRow() === 0) {
+    sh.appendRow(headers);
+  }
+  return sh;
+}
+
+function now_() {
+  return Utilities.formatDate(new Date(), Session.getScriptTimeZone() || 'Asia/Taipei', 'yyyy/MM/dd HH:mm:ss');
+}
+
+// Generic key-value upsert: col1=key, col2=JSON, col3=timestamp
+function upsertRow_(sheetName, key, payload) {
+  if (!key) return {ok:false, msg:'missing key'};
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const sh = ensureSheet_(sheetName, ['索引鍵','資料JSON','最後更新']);
+    const data = sh.getDataRange().getValues();
+    const ts = now_();
+    for (let i = 1; i < data.length; i++) {
+      if (data[i][0] === key) {
+        sh.getRange(i+1, 2, 1, 2).setValues([[payload || '', ts]]);
+        return {ok:true};
+      }
+    }
+    sh.appendRow([key, payload || '', ts]);
+    return {ok:true};
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function getSheetJSON_(sheetName) {
+  const sh = getSS_().getSheetByName(sheetName);
+  if (!sh || sh.getLastRow() < 2) return {};
+  const rows = sh.getDataRange().getValues().slice(1);
+  const out = {};
+  rows.forEach(r => {
+    const key = r[0];
+    if (!key) return;
+    try { out[key] = r[1] ? JSON.parse(r[1]) : {}; }
+    catch (err) { out[key] = r[1]; }
+  });
+  return out;
+}
+
+function getLogRows_() {
+  const sh = getSS_().getSheetByName('編輯紀錄');
+  if (!sh || sh.getLastRow() < 2) return [];
+  return sh.getDataRange().getValues().slice(1).filter(r => r[0]).map(r => ({
+    ts: r[0], student: r[1], teacher: r[2], action: r[3], slots: r[4] ? String(r[4]).split('|') : []
+  }));
+}
+
+function appendLogRows_(payload) {
+  const entries = JSON.parse(payload || '[]');
+  if (!Array.isArray(entries) || entries.length === 0) return {ok:true};
+  const sh = ensureSheet_('編輯紀錄', ['時間','學生','老師','動作','時段']);
+  const values = entries.map(e => [e.ts || now_(), e.student || '', e.teacher || '', e.action || '', (e.slots || []).join('|')]);
+  sh.getRange(sh.getLastRow()+1, 1, values.length, 5).setValues(values);
+  return {ok:true};
+}
+
+function appendUniqueRow_(sheetName, headers, rowData) {
+  if (!rowData[0]) return {ok:false, msg:'missing name'};
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const sh = ensureSheet_(sheetName, headers);
+    const data = sh.getDataRange().getValues();
+    if (!data.slice(1).some(r => r[0] === rowData[0])) sh.appendRow(rowData);
+    return {ok:true};
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function addStudent_(p) {
+  return appendUniqueRow_('學生名單', ['姓名','學號','指導教授','口委1','口委2','口委3','口委4'],
+    [p.name, p.id || '', p.advisor || '', p.c1 || '', p.c2 || '', p.c3 || '', p.c4 || '']);
+}
+
+function getTeachers_() {
+  const sh = getSS_().getSheetByName('老師名單');
+  if (!sh || sh.getLastRow() < 2) return [];
+  return sh.getDataRange().getValues().slice(1).filter(r => r[0]).map(r => ({name:r[0], dept:r[1] || ''}));
+}
+
+function getStudents_() {
+  const sh = getSS_().getSheetByName('學生名單');
+  if (!sh || sh.getLastRow() < 2) return [];
+  return sh.getDataRange().getValues().slice(1).filter(r => r[0]).map(r => ({
+    name:r[0], id:r[1] || '', advisor:r[2] || '', c1:r[3] || '', c2:r[4] || '', c3:r[5] || '', c4:r[6] || '', alt:[]
+  }));
+}
+
+function delRow_(sheetName, name) {
+  const sh = getSS_().getSheetByName(sheetName);
+  if (!sh) return {ok:true};
+  const data = sh.getDataRange().getValues();
+  for (let i = data.length-1; i >= 1; i--) {
+    if (data[i][0] === name) sh.deleteRow(i+1);
+  }
+  return {ok:true};
+}
+
+function clearSheet_(name) {
+  const sh = getSS_().getSheetByName(name);
+  if (sh && sh.getLastRow() > 1) sh.deleteRows(2, sh.getLastRow()-1);
+  return {ok:true};
+}
+
+function clearAll_() {
+  ['學生填寫資料','老師共享時段','編輯紀錄'].forEach(clearSheet_);
+  return {ok:true};
+}`;
+}
+// ═══════════════════════════════════════════════════════
+// APP.JS — Page controllers & UI logic
+// ═══════════════════════════════════════════════════════
+
+let currentPage = 'student';
+let currentStudent = '';
+let currentMode = 'pending';
+let calFilterTeachers = new Set(); // multi-select
+let calViewMode = 'both';
+let adminUnlocked = false;
+
+// ── Toast ────────────────────────────────────────────
+function toast(msg, type = 'ok') {
+  const el = document.getElementById('app-toast');
+  el.textContent = msg; el.className = 'show ' + type;
+  clearTimeout(el._t);
+  el._t = setTimeout(() => el.className = '', 3200);
+}
+
+// ── Navigation ───────────────────────────────────────
+function showPage(id) {
+  currentPage = id;
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(b => b.classList.remove('active'));
+  document.getElementById('page-' + id).classList.add('active');
+  document.getElementById('nav-' + id).classList.add('active');
+  if (id === 'student')   initStudentPage();
+  if (id === 'calendar')  initCalendarPage();
+  if (id === 'overview')  initOverviewPage();
+  if (id === 'admin')     initAdminPage();
+}
+
+// ════════════════════════════════════════════════════════
+// PAGE: STUDENT
+// ════════════════════════════════════════════════════════
+function initStudentPage() {
+  const sel = document.getElementById('stu-name-sel');
+  const prev = sel.value;
+  sel.innerHTML = '<option value="">── 請選擇姓名 ──</option>';
+  STATE.students.forEach(s => {
+    const o = document.createElement('option');
+    o.value = s.name; o.textContent = s.name;
+    sel.appendChild(o);
+  });
+  if (prev) sel.value = prev;
+  if (currentStudent) renderStudentForm();
+  else document.getElementById('stu-form-wrap').style.display = 'none';
+}
+
+function onStudentSelect() {
+  currentStudent = document.getElementById('stu-name-sel').value;
+  if (!currentStudent) { document.getElementById('stu-form-wrap').style.display = 'none'; return; }
+  renderStudentForm();
+}
+
+function renderStudentForm() {
+  const s = STATE.students.find(x => x.name === currentStudent);
+  if (!s) return;
+  const d = getStuData(currentStudent) || {};
+
+  // Committee info display — flat list of all possible teachers (no 口委1/2/3 labels)
+  const allPossible = [s.advisor, s.c1, s.c2, s.c3, s.c4, ...(s.alt || [])].filter(Boolean);
+  // dedupe while preserving order
+  const seen = new Set();
+  const uniquePossible = allPossible.filter(n => seen.has(n) ? false : seen.add(n));
+  document.getElementById('stu-committee-info').innerHTML = `
+    <div style="margin-bottom:6px">
+      <div class="text-muted" style="font-size:.76rem;margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em">所有可能參與的老師</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">
+        ${uniquePossible.map(n => {
+          const isAdvisor = n === s.advisor;
+          return `<span class="tag" style="${isAdvisor ? 'background:var(--paper2);border-color:var(--gold);color:var(--gold);font-weight:600' : ''}">${isAdvisor ? '★ ' : ''}${n}</span>`;
+        }).join('')}
+      </div>
+    </div>
+    <p class="text-muted mt-2" style="font-size:.78rem">★ 為指導教授　｜　資料有誤請聯絡管理者</p>`;
+
+  // Advisor attend
+  document.getElementById('adv-name-lbl').textContent = s.advisor || '';
+  document.getElementById('adv-attend-chk').checked = d.advisorAttend === true;
+
+  // Mode
+  currentMode = d.mode || 'pending';
+  setMode(currentMode);
+
+  // Build teacher selector for availability
+  renderTeacherSelector(s, d);
+
+  // Note
+  document.getElementById('note-pending').value = d.notePending || '';
+
+  // Confirmed fields
+  if (d.confirmed) {
+    document.getElementById('conf-date').value     = d.confirmed.date || '';
+    document.getElementById('conf-start').value    = d.confirmed.startTime || '';
+    document.getElementById('conf-end').value      = d.confirmed.endTime || '';
+    document.getElementById('conf-location').value = d.confirmed.location || '';
+    document.getElementById('conf-note').value     = d.confirmed.note || '';
+  }
+  // Confirmed committee checkboxes
+  renderConfirmedCommittee(s, d);
+
+  document.getElementById('stu-form-wrap').style.display = 'block';
+}
+
+function setMode(mode) {
+  currentMode = mode;
+  document.querySelectorAll('.mode-opt').forEach(el => el.classList.remove('active'));
+  document.getElementById('mode-' + mode + '-lbl').classList.add('active');
+  document.getElementById('mode-' + mode).checked = true;
+  document.getElementById('form-pending').style.display   = mode === 'pending'   ? 'block' : 'none';
+  document.getElementById('form-confirmed').style.display = mode === 'confirmed' ? 'block' : 'none';
+}
+
+// ── Teacher Selector for Availability ────────────────────────────────
+// Shows checkboxes for all teachers; pre-checks the student's own committee
+function renderTeacherSelector(student, savedData) {
+  const container = document.getElementById('teacher-selector-wrap');
+  const defaultMembers = [student.c1, student.c2, student.c3, student.c4].filter(Boolean);
+  if (student.advisor) defaultMembers.push(student.advisor);
+
+  // Which teachers are currently selected (saved or default)
+  const savedSelected = savedData.selectedTeachers || defaultMembers;
+  const selectedSet = new Set(savedSelected);
+
+  container.innerHTML = '';
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px';
+
+  // Group: 口委 (default), then all others
+  const allTeacherNames = STATE.teachers.map(t => t.name);
+  const ordered = [
+    ...defaultMembers,
+    ...allTeacherNames.filter(n => !defaultMembers.includes(n))
+  ];
+
+  ordered.forEach(name => {
+    const tInfo = STATE.teachers.find(t => t.name === name);
+    const isDefault = defaultMembers.includes(name);
+    const isChecked = selectedSet.has(name);
+    const btn = document.createElement('label');
+    btn.className = 'teacher-chip' + (isChecked ? ' on' : '') + (isDefault ? ' default-member' : '');
+    btn.title = tInfo ? tInfo.dept : '';
+    btn.innerHTML = `<input type="checkbox" style="display:none" value="${name}" ${isChecked ? 'checked' : ''} onchange="onTeacherChipChange(this)">
+      ${isDefault ? '★ ' : ''}${name}`;
+    wrap.appendChild(btn);
+  });
+
+  container.appendChild(wrap);
+  // Rebuild avail rows based on current selection
+  rebuildAvailRows(savedData.availability || {});
+}
+
+function onTeacherChipChange(checkbox) {
+  checkbox.parentElement.classList.toggle('on', checkbox.checked);
+  const d = getStuData(currentStudent) || {};
+  rebuildAvailRows(d.availability || {});
+  // Update selectedTeachers in the DOM for saving
+}
+
+function getSelectedTeachers() {
+  return [...document.querySelectorAll('#teacher-selector-wrap input[type=checkbox]:checked')]
+    .map(el => el.value);
+}
+
+function rebuildAvailRows(savedAvail) {
+  const selected = getSelectedTeachers();
+  const container = document.getElementById('avail-rows');
+  container.innerHTML = '';
+  selected.forEach(teacher => {
+    const saved = savedAvail[teacher] || { slots: [] };
+    const savedSlots = new Set(saved.slots || []);
+    const tInfo = STATE.teachers.find(t => t.name === teacher);
+    container.appendChild(buildTeacherAvailBlock(teacher, tInfo?.dept || '', savedSlots));
+  });
+}
+
+function buildTeacherAvailBlock(teacher, dept, savedSlots) {
+  // If student has no local save for this teacher, use shared avail as default
+  if (savedSlots.size === 0) {
+    const shared = getTeacherAvail(teacher);
+    shared.forEach(s => savedSlots.add(s));
+  }
+  const section = document.createElement('div');
+  section.className = 'card';
+  section.style.cssText = 'padding:16px 20px;margin-bottom:10px;background:var(--paper)';
+  section.dataset.teacher = teacher;
+
+  const hdr = document.createElement('div');
+  hdr.style.cssText = 'font-weight:600;font-size:.88rem;margin-bottom:10px;display:flex;align-items:center;gap:8px';
+  hdr.innerHTML = `<span class="badge b-muted">${dept}</span> <strong>${teacher}</strong>`;
+  section.appendChild(hdr);
+
+  EXAM_DATES.forEach(date => {
+    const dk = dateKey(date);
+    const dateDiv = document.createElement('div');
+    dateDiv.className = 'avail-section';
+
+    // Date label + quick buttons on same row
+    const dateHeader = document.createElement('div');
+    dateHeader.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap';
+    dateHeader.innerHTML = `
+      <div class="avail-date-label">📅 ${fmtDateShort(date)}</div>
+      <button class="btn btn-xs btn-secondary" onclick="markDay('${teacher}','${dk}','all')">全天</button>
+      <button class="btn btn-xs btn-secondary" onclick="markDay('${teacher}','${dk}','am')">上午</button>
+      <button class="btn btn-xs btn-secondary" onclick="markDay('${teacher}','${dk}','pm')">下午</button>
+      <button class="btn btn-xs btn-secondary" onclick="markDay('${teacher}','${dk}','none')">清空</button>`;
+    dateDiv.appendChild(dateHeader);
+
+    // AM row
+    const amRow = document.createElement('div');
+    amRow.className = 'avail-period-row';
+    amRow.innerHTML = `<div class="avail-period-label">上午</div>
+      <div class="avail-blocks" data-teacher="${teacher}" data-date="${dk}" data-period="am"></div>`;
+    const amBlocks = amRow.querySelector('.avail-blocks');
+    ['08:00','08:30','09:00','09:30','10:00','10:30','11:00','11:30'].forEach(t => {
+      const key = `${dk}_${t}`;
+      const b = document.createElement('div');
+      b.className = 'avail-block' + (savedSlots.has(key) ? ' on' : '');
+      b.textContent = t; b.dataset.key = key;
+      b.onclick = () => b.classList.toggle('on');
+      amBlocks.appendChild(b);
+    });
+
+    // PM row
+    const pmRow = document.createElement('div');
+    pmRow.className = 'avail-period-row';
+    pmRow.innerHTML = `<div class="avail-period-label">下午</div>
+      <div class="avail-blocks" data-teacher="${teacher}" data-date="${dk}" data-period="pm"></div>`;
+    const pmBlocks = pmRow.querySelector('.avail-blocks');
+    ['13:00','13:30','14:00','14:30','15:00','15:30','16:00','16:30','17:00','17:30'].forEach(t => {
+      const key = `${dk}_${t}`;
+      const b = document.createElement('div');
+      b.className = 'avail-block' + (savedSlots.has(key) ? ' on' : '');
+      b.textContent = t; b.dataset.key = key;
+      b.onclick = () => b.classList.toggle('on');
+      pmBlocks.appendChild(b);
+    });
+
+    dateDiv.appendChild(amRow);
+    dateDiv.appendChild(pmRow);
+    section.appendChild(dateDiv);
+  });
+
+  return section;
+}
+
+// Per-day quick mark: teacher + date + period ('all'|'am'|'pm'|'none')
+function markDay(teacher, dk, period) {
+  document.querySelectorAll(`.avail-blocks[data-teacher="${teacher}"][data-date="${dk}"] .avail-block`).forEach(b => {
+    const bPeriod = b.closest('.avail-blocks').dataset.period;
+    if (period === 'all')  b.classList.add('on');
+    else if (period === 'none') b.classList.remove('on');
+    else if (period === 'am' && bPeriod === 'am') b.classList.add('on');
+    else if (period === 'am' && bPeriod === 'pm') b.classList.remove('on');
+    else if (period === 'pm' && bPeriod === 'pm') b.classList.add('on');
+    else if (period === 'pm' && bPeriod === 'am') b.classList.remove('on');
+  });
+}
+
+function collectAvailability() {
+  const result = {};
+  document.querySelectorAll('.avail-blocks[data-teacher]').forEach(wrap => {
+    const teacher = wrap.dataset.teacher;
+    if (!result[teacher]) result[teacher] = { slots: [] };
+    wrap.querySelectorAll('.avail-block.on').forEach(b => {
+      if (!result[teacher].slots.includes(b.dataset.key))
+        result[teacher].slots.push(b.dataset.key);
+    });
+  });
+  return result;
+}
+
+// ── Confirmed Committee Checkboxes ──────────────────────────────────
+function renderConfirmedCommittee(student, savedData) {
+  const container = document.getElementById('conf-committee-wrap');
+  container.innerHTML = '';
+
+  // Build full deduplicated list: advisor first, then c1-c4, then alt
+  const raw = [student.advisor, student.c1, student.c2, student.c3, student.c4, ...(student.alt || [])].filter(Boolean);
+  const seen = new Set();
+  const allPossible = raw.filter(n => seen.has(n) ? false : seen.add(n));
+
+  // Previously saved selection (default: c1+c2+c3+c4, not advisor)
+  const defaultChecked = new Set([student.c1, student.c2, student.c3, student.c4].filter(Boolean));
+  const confirmedMembers = new Set(savedData.confirmed?.committeePresent || [...defaultChecked]);
+
+  allPossible.forEach(name => {
+    const isAdvisor = name === student.advisor;
+    const lbl = document.createElement('label');
+    lbl.style.cssText = 'display:flex;align-items:center;gap:8px;cursor:pointer;font-size:.87rem;padding:5px 0;border-bottom:1px solid var(--border)';
+    lbl.innerHTML = `
+      <input type="checkbox" style="width:16px;height:16px;accent-color:var(--accent);flex-shrink:0"
+        value="${name}" ${confirmedMembers.has(name) ? 'checked' : ''}>
+      <span>${name}${isAdvisor ? ' <span class="badge b-gold" style="font-size:.7rem">指導教授</span>' : ''}</span>`;
+    container.appendChild(lbl);
+  });
+}
+
+function getConfirmedCommittee() {
+  return [...document.querySelectorAll('#conf-committee-wrap input[type=checkbox]:checked')]
+    .map(el => el.value);
+}
+
+async function savePending() {
+  if (!currentStudent) { toast('請先選擇姓名', 'err'); return; }
+  const avail = collectAvailability();
+  const data = {
+    mode: 'pending',
+    advisorAttend: document.getElementById('adv-attend-chk').checked,
+    selectedTeachers: getSelectedTeachers(),
+    availability: avail,
+    notePending: document.getElementById('note-pending').value,
+  };
+  setStuData(currentStudent, data);
+  // Sync each teacher's slots to shared table
+  syncAvailabilityFromForm(currentStudent, avail);
+  toast(`✅ ${currentStudent} 的資料已儲存`);
+}
+
+async function saveConfirmed() {
+  if (!currentStudent) { toast('請先選擇姓名', 'err'); return; }
+  const date      = document.getElementById('conf-date').value;
+  const startTime = document.getElementById('conf-start').value;
+  const endTime   = document.getElementById('conf-end').value;
+  if (!date || !startTime || !endTime) { toast('請填寫日期與起訖時間', 'err'); return; }
+  const data = {
+    mode: 'confirmed',
+    advisorAttend: document.getElementById('adv-attend-chk').checked,
+    selectedTeachers: getSelectedTeachers(),
+    confirmed: {
+      date, startTime, endTime,
+      location: document.getElementById('conf-location').value,
+      note:     document.getElementById('conf-note').value,
+      committeePresent: getConfirmedCommittee(),
+    }
+  };
+  setStuData(currentStudent, data);
+  toast(`✅ ${currentStudent} 的口試時間已確認：${date} ${startTime}–${endTime}`);
+}
+
+function onAdvisorAttendChange() {
+  const s = STATE.students.find(x => x.name === currentStudent);
+  if (!s) return;
+  const d = getStuData(currentStudent) || {};
+  renderTeacherSelector(s, d);
+}
+
+async function selfAddStudent() {
+  const name = document.getElementById('self-add-name').value.trim();
+  if (!name) { toast('請輸入姓名', 'err'); return; }
+  if (STATE.students.find(s => s.name === name)) { toast('名單中已有此姓名', 'warn'); return; }
+  await gasCall('addStudent', { name });
+  toast(`已新增 ${name}`);
+  initStudentPage();
+  document.getElementById('stu-name-sel').value = name;
+  currentStudent = name;
+  renderStudentForm();
+}
+
+// ════════════════════════════════════════════════════════
+// PAGE: CALENDAR
+// ════════════════════════════════════════════════════════
+function initCalendarPage() {
+  buildCalTeacherList();
+  renderCalendar();
+}
+
+function buildCalTeacherList() {
+  const container = document.getElementById('cal-teacher-list');
+  container.innerHTML = '';
+  STATE.teachers.forEach(t => {
+    const lbl = document.createElement('label');
+    lbl.className = 'cal-teacher-chip' + (calFilterTeachers.has(t.name) ? ' on' : '');
+    lbl.innerHTML = `<input type="checkbox" style="display:none" value="${t.name}" 
+      ${calFilterTeachers.has(t.name) ? 'checked' : ''}
+      onchange="onCalTeacherToggle(this)">
+      <span class="dept-dot dept-${t.dept === '本系' ? 'home' : t.dept === '外系' ? 'ext' : 'away'}"></span>
+      ${t.name}`;
+    container.appendChild(lbl);
+  });
+}
+
+function onCalTeacherToggle(el) {
+  if (el.checked) calFilterTeachers.add(el.value);
+  else calFilterTeachers.delete(el.value);
+  el.parentElement.classList.toggle('on', el.checked);
+  renderCalendar();
+}
+
+function clearCalTeachers() {
+  calFilterTeachers.clear();
+  buildCalTeacherList();
+  renderCalendar();
+}
+
+function renderCalendar() {
+  calViewMode = document.querySelector('input[name="cal-view"]:checked')?.value || 'both';
+
+  const gridEl = document.getElementById('cal-grid');
+  gridEl.style.gridTemplateColumns = `64px repeat(${EXAM_DATES.length}, 1fr)`;
+  gridEl.innerHTML = '';
+
+  // ── Build data lookups ─────────────────────────────
+  // confirmed events: {dk: [{student, startTime, endTime, location, committeePresent}]}
+  const confirmedByDate = {};
+  // avail: {dk_HH:MM: Set<teacherName>}
+  const availBySlot = {};
+
+  STATE.students.forEach(s => {
+    const d = STATE.stuData[s.name];
+    if (!d) return;
+
+    if (d.mode === 'confirmed' && d.confirmed) {
+      const dk = d.confirmed.date;
+      if (!confirmedByDate[dk]) confirmedByDate[dk] = [];
+      confirmedByDate[dk].push({
+        student: s.name,
+        startTime: d.confirmed.startTime,
+        endTime:   d.confirmed.endTime,
+        location:  d.confirmed.location || '',
+        committeePresent: d.confirmed.committeePresent || [],
+      });
+    }
+
+    if (d.availability) {
+      Object.entries(d.availability).forEach(([teacher, avData]) => {
+        (avData.slots || []).forEach(key => {
+          if (!availBySlot[key]) availBySlot[key] = new Set();
+          availBySlot[key].add(teacher);
+        });
+      });
+    }
+    // Also mark committeePresent teachers as occupied on confirmed slots
+    if (d.mode === 'confirmed' && d.confirmed && d.confirmed.committeePresent) {
+      const dk = d.confirmed.date;
+      const startH = timeToH(d.confirmed.startTime);
+      const endH   = timeToH(d.confirmed.endTime);
+      // Generate 30-min slots covered
+      for (let h = Math.floor(startH * 2) / 2; h < endH; h += 0.5) {
+        const hh = String(Math.floor(h)).padStart(2,'0');
+        const mm = (h % 1 === 0.5) ? '30' : '00';
+        const key = `${dk}_${hh}:${mm}`;
+        d.confirmed.committeePresent.forEach(teacher => {
+          if (!availBySlot[key]) availBySlot[key] = new Set();
+          // mark as "occupied" differently — we store separately
+        });
+      }
+    }
+  });
+
+  // Occupied slots from confirmed committees
+  const occupiedBySlot = {}; // {dk_HH:MM: Set<teacherName>}
+  STATE.students.forEach(s => {
+    const d = STATE.stuData[s.name];
+    if (d?.mode !== 'confirmed' || !d.confirmed) return;
+    const cp = d.confirmed.committeePresent || [];
+    if (!cp.length) return;
+    const dk = d.confirmed.date;
+    const startH = timeToH(d.confirmed.startTime);
+    const endH   = timeToH(d.confirmed.endTime);
+    for (let h = Math.floor(startH * 2) / 2; h < endH; h += 0.5) {
+      const hh = String(Math.floor(h)).padStart(2,'0');
+      const mm = (h % 1 === 0.5) ? '30' : '00';
+      const key = `${dk}_${hh}:${mm}`;
+      if (!occupiedBySlot[key]) occupiedBySlot[key] = new Set();
+      cp.forEach(t => occupiedBySlot[key].add(t));
+    }
+  });
+
+  const selectedTeachers = [...calFilterTeachers];
+
+  // ── Header ─────────────────────────────────────────
+  const corner = document.createElement('div');
+  corner.className = 'cal-time-header'; corner.textContent = '時間';
+  gridEl.appendChild(corner);
+
+  const DAYS = ['日','一','二','三','四','五','六'];
+  EXAM_DATES.forEach(date => {
+    const dh = document.createElement('div');
+    dh.className = 'cal-date-header';
+    dh.innerHTML = `${date.getMonth()+1}/${date.getDate()}<br><span class="dow">週${DAYS[date.getDay()]}</span>`;
+    gridEl.appendChild(dh);
+  });
+
+  // ── Hour rows ──────────────────────────────────────
+  CAL_HOURS.forEach(hour => {
+    const tc = document.createElement('div');
+    tc.className = 'cal-time-cell';
+    tc.textContent = `${String(hour).padStart(2,'0')}:00`;
+    gridEl.appendChild(tc);
+
+    EXAM_DATES.forEach(date => {
+      const dk = dateKey(date);
+      const cell = document.createElement('div');
+      cell.className = 'cal-slot';
+
+      // Exam windows background
+      if ([9,10,13,14,15,16].includes(hour)) cell.classList.add('exam-window');
+      if (hour === 12) cell.classList.add('lunch-break');
+
+      // ── Confirmed events ───────────────────────────
+      if (calViewMode === 'confirmed' || calViewMode === 'both') {
+        (confirmedByDate[dk] || []).forEach(ev => {
+          const startH = timeToH(ev.startTime);
+          const endH   = timeToH(ev.endTime);
+          if (startH <= hour && hour < endH) {
+            const ev_el = document.createElement('div');
+            ev_el.className = 'cal-event confirmed';
+            ev_el.title = `${ev.student} ${ev.startTime}–${ev.endTime}${ev.location ? ' @ ' + ev.location : ''}\n出席：${ev.committeePresent.join('、')}`;
+            ev_el.textContent = startH === hour
+              ? `🎓 ${ev.student} ${ev.startTime}–${ev.endTime}`
+              : `↕ ${ev.student}`;
+            cell.appendChild(ev_el);
+          }
+        });
+      }
+
+      // ── Teacher availability ───────────────────────
+      if (calViewMode === 'avail' || calViewMode === 'both') {
+        const slots30 = [
+          `${dk}_${String(hour).padStart(2,'0')}:00`,
+          `${dk}_${String(hour).padStart(2,'0')}:30`,
+        ];
+
+        if (selectedTeachers.length > 0) {
+          // Show each selected teacher's status in this cell
+          selectedTeachers.forEach(teacher => {
+            const isAvail    = slots30.some(k => availBySlot[k]?.has(teacher));
+            const isOccupied = slots30.some(k => occupiedBySlot[k]?.has(teacher));
+            if (isOccupied) {
+              const ev = document.createElement('div');
+              ev.className = 'cal-event occupied';
+              ev.textContent = `🚫 ${teacher}`;
+              cell.appendChild(ev);
+            } else if (isAvail) {
+              const ev = document.createElement('div');
+              ev.className = 'cal-event avail';
+              ev.textContent = `✓ ${teacher}`;
+              cell.appendChild(ev);
+            }
+          });
+
+          // Highlight cell if ALL selected teachers are available (and none occupied)
+          const allAvail = selectedTeachers.every(t =>
+            slots30.some(k => availBySlot[k]?.has(t)) &&
+            !slots30.some(k => occupiedBySlot[k]?.has(t))
+          );
+          if (allAvail && selectedTeachers.length > 1) {
+            cell.classList.add('all-avail');
+          }
+        } else {
+          // No filter: show count
+          const teachers = new Set();
+          slots30.forEach(k => (availBySlot[k] || new Set()).forEach(t => teachers.add(t)));
+          if (teachers.size > 0) {
+            const cnt = document.createElement('div');
+            cnt.className = 'avail-count';
+            cnt.textContent = `${teachers.size}位有空`;
+            cell.appendChild(cnt);
+          }
+        }
+      }
+
+      gridEl.appendChild(cell);
+    });
+  });
+}
+
+function timeToH(timeStr) {
+  if (!timeStr) return 0;
+  const [h, m] = timeStr.split(':').map(Number);
+  return h + (m || 0) / 60;
+}
+
+// ════════════════════════════════════════════════════════
+// PAGE: OVERVIEW
+// ════════════════════════════════════════════════════════
+let ovFilter = 'all';
+let ovAllData = [];
+
+function initOverviewPage() {
+  ovAllData = STATE.students.map(s => ({
+    student: s, data: STATE.stuData[s.name] || null,
+  }));
+  detectConflicts();
+  renderOverview();
+}
+
+function detectConflicts() {
+  const confirmed = ovAllData.filter(o => o.data?.mode === 'confirmed' && o.data.confirmed?.date);
+  const conflicts = [];
+  for (let i = 0; i < confirmed.length; i++) {
+    for (let j = i + 1; j < confirmed.length; j++) {
+      const a = confirmed[i], b = confirmed[j];
+      const aD = a.data.confirmed, bD = b.data.confirmed;
+      if (aD.date !== bD.date) continue;
+      const aS = timeToH(aD.startTime), aE = timeToH(aD.endTime);
+      const bS = timeToH(bD.startTime), bE = timeToH(bD.endTime);
+      if (aS < bE && bS < aE) {
+        const aM = aD.committeePresent || getCommittee(a.student, a.data);
+        const bM = bD.committeePresent || getCommittee(b.student, b.data);
+        const shared = aM.filter(x => bM.includes(x));
+        if (shared.length) {
+          conflicts.push(`<strong>${a.student.name}</strong> 與 <strong>${b.student.name}</strong>（${aD.date} ${aD.startTime}–${aD.endTime}）共同口委衝突：${shared.join('、')}`);
+        }
+      }
+    }
+  }
+  const alertEl = document.getElementById('conflict-alert');
+  if (conflicts.length) {
+    alertEl.style.display = 'flex';
+    document.getElementById('conflict-msg').innerHTML = conflicts.join('<br>');
+  } else { alertEl.style.display = 'none'; }
+
+  // Confirmed summary
+  const confList = confirmed.sort((a,b) => {
+    const ac = a.data.confirmed, bc = b.data.confirmed;
+    return (ac.date+ac.startTime).localeCompare(bc.date+bc.startTime);
+  });
+  const summCard = document.getElementById('confirmed-summary-card');
+  const summEl   = document.getElementById('confirmed-summary');
+  if (confList.length) {
+    summCard.style.display = 'block';
+    const byDate = {};
+    confList.forEach(o => {
+      const dk = o.data.confirmed.date;
+      if (!byDate[dk]) byDate[dk] = [];
+      byDate[dk].push(o);
+    });
+    summEl.innerHTML = Object.entries(byDate).map(([date, items]) => `
+      <div style="margin-bottom:12px">
+        <div style="font-weight:700;font-size:.86rem;margin-bottom:5px">${date}</div>
+        <div style="display:flex;flex-wrap:wrap;gap:5px">
+          ${items.map(o => `<span class="badge b-ok" title="出席：${(o.data.confirmed.committeePresent||[]).join('、')}">✅ ${o.student.name} ${o.data.confirmed.startTime}–${o.data.confirmed.endTime}${o.data.confirmed.location ? ' @ '+o.data.confirmed.location : ''}</span>`).join('')}
+        </div>
+      </div>`).join('');
+  } else { summCard.style.display = 'none'; }
+}
+
+function getCommittee(student, data) {
+  const m = [student.c1, student.c2, student.c3, student.c4].filter(Boolean);
+  if (data?.advisorAttend && student.advisor) m.push(student.advisor);
+  return m;
+}
+
+function filterOverview(type) {
+  ovFilter = type;
+  document.querySelectorAll('.ov-filter-btn').forEach(b => {
+    b.classList.remove('btn-teal'); b.classList.add('btn-secondary');
+  });
+  event.target.classList.remove('btn-secondary');
+  event.target.classList.add('btn-teal');
+  renderOverview();
+}
+
+function renderOverview() {
+  let data = ovAllData;
+  if (ovFilter === 'confirmed') data = ovAllData.filter(o => o.data?.mode === 'confirmed');
+  if (ovFilter === 'pending')   data = ovAllData.filter(o => o.data?.mode === 'pending');
+  if (ovFilter === 'empty')     data = ovAllData.filter(o => !o.data?.mode);
+
+  const grid = document.getElementById('ov-grid');
+  if (!data.length) { grid.innerHTML = '<p class="text-muted" style="padding:30px;text-align:center">無資料</p>'; return; }
+  grid.innerHTML = '';
+
+  data.forEach(({ student: s, data: d }) => {
+    const mode = d?.mode || 'empty';
+    const card = document.createElement('div'); card.className = 'ov-card';
+    const headClass = { confirmed:'confirmed', pending:'pending', empty:'empty' }[mode];
+    const headLabel = { confirmed:'✅ 已確定', pending:'🔄 協調中', empty:'⬜ 未填寫' }[mode];
+    const committee = [s.c1,s.c2,s.c3,s.c4].filter(Boolean);
+
+    let bodyHtml = `<div class="ov-meta">
+      指導：${s.advisor||'—'}${d?.advisorAttend ? ' <span class="badge b-err" style="font-size:.7rem">需出席</span>' : ''}
+      　口委：${committee.join('、')||'—'}
+    </div>`;
+
+    if (mode === 'confirmed' && d.confirmed) {
+      const cp = d.confirmed.committeePresent || [];
+      bodyHtml += `
+        <div style="font-weight:600">${d.confirmed.date} ${d.confirmed.startTime}–${d.confirmed.endTime}</div>
+        ${d.confirmed.location ? `<div class="text-muted">📍 ${d.confirmed.location}</div>` : ''}
+        ${cp.length ? `<div class="text-muted" style="font-size:.78rem">出席：${cp.join('、')}</div>` : ''}
+        ${d.confirmed.note ? `<div class="text-muted">備註：${d.confirmed.note}</div>` : ''}`;
+    } else if (mode === 'pending' && d.availability) {
+      const sel = d.selectedTeachers || committee;
+      sel.forEach(teacher => {
+        const av = d.availability[teacher];
+        const count = av?.slots?.length || 0;
+        bodyHtml += `<div style="margin-bottom:3px">
+          <span class="badge ${count>0?'b-ok':'b-muted'}" style="margin-right:4px">${count>0?'✓':'？'}</span>
+          <strong>${teacher}</strong>
+          ${count>0 ? `<span class="text-muted" style="font-size:.78rem">（${count} 個時段）</span>` : ''}
+        </div>`;
+      });
+      if (d.notePending) bodyHtml += `<div class="text-muted mt-2" style="font-size:.8rem">📝 ${d.notePending}</div>`;
+    } else {
+      bodyHtml += `<div class="text-muted">尚未填寫</div>`;
+    }
+
+    card.innerHTML = `
+      <div class="ov-head ${headClass}">
+        <span>${s.name}</span>
+        <span style="font-size:.76rem;opacity:.75">${headLabel}</span>
+      </div>
+      <div class="ov-body">${bodyHtml}</div>`;
+    grid.appendChild(card);
+  });
+}
+
+// ════════════════════════════════════════════════════════
+// PAGE: ADMIN
+// ════════════════════════════════════════════════════════
+function initAdminPage() {
+  document.getElementById('gas-url-input').value = STATE.gasUrl;
+  document.getElementById('gas-script-pre').textContent = GAS_SCRIPT();
+  updateSyncStatus();
+}
+
+function showAdmTab(id) {
+  document.querySelectorAll('.adm-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.adm-panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('adm-' + id).classList.add('active');
+  const tab = Array.from(document.querySelectorAll('.adm-tab'))
+    .find(t => (t.getAttribute('onclick') || '').includes(`'${id}'`));
+  if (tab) tab.classList.add('active');
+  if (id === 'students') renderAdmStudents();
+  if (id === 'teachers') renderAdmTeachers();
+}
+
+function pinNext(el, nid) { if (el.value && nid) document.getElementById(nid).focus(); }
+function pinKey(e, el, pid, nid) {
+  if (e.key === 'Backspace' && !el.value && pid) document.getElementById(pid).focus();
+  if (e.key === 'Enter') checkPin();
+}
+function checkPin() {
+  const pin = ['pa','pb','pc','pd'].map(id => document.getElementById(id).value).join('');
+  if (pin === STATE.adminPin) {
+    adminUnlocked = true;
+    document.getElementById('adm-lock').style.display = 'none';
+    document.getElementById('adm-content').style.display = 'block';
+    initAdminPage(); renderAdmStudents();
+  } else if (pin.length === 4) {
+    document.getElementById('pin-err').style.display = 'block';
+    ['pa','pb','pc','pd'].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('pa').focus();
+  }
+}
+function lockAdmin() {
+  adminUnlocked = false;
+  document.getElementById('adm-lock').style.display = 'block';
+  document.getElementById('adm-content').style.display = 'none';
+  ['pa','pb','pc','pd'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('pin-err').style.display = 'none';
+}
+function changePin() {
+  const np = document.getElementById('new-pin-input').value;
+  if (!/^\d{4}$/.test(np)) { toast('PIN 碼必須是4位數字', 'err'); return; }
+  STATE.adminPin = np; localStorage.setItem('adminPin', np); toast('PIN 碼已更新');
+}
+
+async function saveGasUrl() {
+  STATE.gasUrl = normalizeGasUrl(document.getElementById('gas-url-input').value);
+  document.getElementById('gas-url-input').value = STATE.gasUrl;
+  localStorage.setItem('gasUrl', STATE.gasUrl);
+  if (!STATE.gasUrl) { setSyncIndicator('local'); return; }
+
+  setSyncIndicator('checking');
+  const ping = await gasCall('ping');
+  if (ping?.ok === false) {
+    setSyncIndicator(false);
+    toast('連線失敗：' + (ping.msg || '請確認 Apps Script 已部署為 /exec 且存取權為所有人'), 'err');
+    return;
+  }
+
+  const pushed = await pushAllLocalToGas();
+  if (pushed?.ok === false) {
+    setSyncIndicator(false);
+    toast('已連線但同步失敗：' + (pushed.msg || '請檢查 Apps Script 權限與程式碼版本'), 'err');
+    return;
+  }
+  setSyncIndicator(true);
+  toast('✅ 已連線，並已同步目前本機資料到 Google Sheet', 'ok');
+}
+async function initGasSheets() {
+  const r = await gasCall('init');
+  if (r?.ok !== false) { setSyncIndicator(true); toast('✅ Google Sheet 初始化完成', 'ok'); }
+  else { setSyncIndicator(false); toast('初始化失敗：' + (r.msg || '請檢查 Apps Script 部署'), 'err'); }
+}
+function setSyncIndicator(status) {
+  const dot = document.getElementById('sync-dot');
+  const lbl = document.getElementById('sync-lbl');
+  if (!dot || !lbl) return;
+  if (status === 'local' || !STATE.gasUrl) { dot.className = 'sync-dot local'; lbl.textContent = '本機模式'; return; }
+  if (status === 'checking') { dot.className = 'sync-dot local'; lbl.textContent = '連線檢查中'; return; }
+  if (status === true) { dot.className = 'sync-dot ok'; lbl.textContent = '已連線'; return; }
+  dot.className = 'sync-dot err'; lbl.textContent = '連線失敗';
+}
+async function updateSyncStatus() {
+  if (!STATE.gasUrl) { setSyncIndicator('local'); return; }
+  const r = await gasCall('ping');
+  setSyncIndicator(r?.ok !== false);
+}
+function copyGasScript() {
+  navigator.clipboard.writeText(GAS_SCRIPT()).then(() => toast('✅ 已複製程式碼'));
+}
+
+function renderAdmStudents() {
+  const tbody = document.getElementById('adm-stu-tbody');
+  document.getElementById('adm-stu-count').textContent = STATE.students.length + ' 人';
+  tbody.innerHTML = STATE.students.map(s => `
+    <tr>
+      <td><strong>${s.name}</strong></td><td>${s.id||''}</td><td>${s.advisor||''}</td>
+      <td>${[s.c1,s.c2,s.c3,s.c4].filter(Boolean).join('、')}</td>
+      <td>${(s.alt||[]).join('、')}</td>
+      <td><span class="badge ${STATE.stuData[s.name]?.mode==='confirmed'?'b-ok':STATE.stuData[s.name]?.mode==='pending'?'b-warn':'b-muted'}">${STATE.stuData[s.name]?.mode==='confirmed'?'已確定':STATE.stuData[s.name]?.mode==='pending'?'協調中':'未填'}</span></td>
+      <td><button class="btn btn-xs btn-danger" onclick="admDeleteStudent('${s.name}')">刪除</button></td>
+    </tr>`).join('') || '<tr><td colspan="7" class="text-muted" style="text-align:center;padding:16px">無資料</td></tr>';
+}
+async function admAddStudent() {
+  const name = document.getElementById('adm-sn').value.trim();
+  if (!name) { toast('請填寫姓名', 'err'); return; }
+  await gasCall('addStudent', { name, id:document.getElementById('adm-si').value.trim(), advisor:document.getElementById('adm-sa').value.trim(), c1:document.getElementById('adm-sc1').value.trim(), c2:document.getElementById('adm-sc2').value.trim(), c3:document.getElementById('adm-sc3').value.trim(), c4:document.getElementById('adm-sc4').value.trim() });
+  toast(`✅ 已新增 ${name}`);
+  ['adm-sn','adm-si','adm-sa','adm-sc1','adm-sc2','adm-sc3','adm-sc4'].forEach(id => document.getElementById(id).value='');
+  renderAdmStudents();
+}
+async function admDeleteStudent(name) {
+  showConfirm(`確認刪除「${name}」？`, '此操作無法復原。', async () => {
+    await gasCall('deleteStudent', { name }); toast(`已刪除 ${name}`); renderAdmStudents();
+  });
+}
+async function admBatchImport() {
+  const raw = document.getElementById('adm-batch').value.trim();
+  if (!raw) return;
+  let count = 0;
+  for (const line of raw.split('\n').filter(l => l.trim())) {
+    const [name,id,advisor,c1,c2,c3,c4] = line.split(',').map(p=>p.trim());
+    if (name) { await gasCall('addStudent',{name,id:id||'',advisor:advisor||'',c1:c1||'',c2:c2||'',c3:c3||'',c4:c4||''}); count++; }
+  }
+  toast(`✅ 已匯入 ${count} 位學生`);
+  document.getElementById('adm-batch').value='';
+  renderAdmStudents();
+}
+function renderAdmTeachers() {
+  const list = document.getElementById('adm-tch-list');
+  document.getElementById('adm-tch-count').textContent = STATE.teachers.length + ' 位';
+  list.innerHTML = STATE.teachers.map(t => `
+    <div style="display:inline-flex;align-items:center;gap:5px;background:var(--paper2);border:1px solid var(--border);border-radius:8px;padding:4px 10px;margin:3px">
+      <span style="font-size:.84rem"><strong>${t.name}</strong> <span class="text-muted">${t.dept}</span></span>
+      <button class="btn btn-xs btn-danger" style="padding:2px 6px" onclick="admDeleteTeacher('${t.name}')">✕</button>
+    </div>`).join('');
+}
+async function admAddTeacher() {
+  const name = document.getElementById('adm-tn').value.trim();
+  const dept = document.getElementById('adm-td').value;
+  if (!name) { toast('請填寫姓名', 'err'); return; }
+  await gasCall('addTeacher', { name, dept });
+  toast(`✅ 已新增 ${name}`);
+  document.getElementById('adm-tn').value='';
+  renderAdmTeachers();
+}
+async function admDeleteTeacher(name) {
+  if (TEACHERS.find(t => t.name === name)) { toast('內建老師無法在此刪除', 'warn'); return; }
+  await gasCall('deleteTeacher', { name }); toast(`已刪除 ${name}`); renderAdmTeachers();
+}
+function exportCSV() {
+  // Header
+  let csv = '\uFEFF學生,學號,指導教授,指導教授出席,所有可能口委,狀態,確定日期,開始,結束,地點,出席口委,備註\n';
+  STATE.students.forEach(s => {
+    const d = STATE.stuData[s.name] || {}, c = d.confirmed || {};
+    // All possible teachers (advisor + c1-c4 + alt), deduped
+    const seen = new Set();
+    const allPossible = [s.advisor, s.c1, s.c2, s.c3, s.c4, ...(s.alt||[])]
+      .filter(Boolean).filter(n => seen.has(n) ? false : seen.add(n));
+    csv += `"${s.name}","${s.id||''}","${s.advisor||''}","${d.advisorAttend?'是':'否'}","${allPossible.join('|')}","${d.mode||'未填'}","${c.date||''}","${c.startTime||''}","${c.endTime||''}","${c.location||''}","${(c.committeePresent||[]).join('|')}","${c.note||''}"\n`;
+  });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], {type:'text/csv;charset=utf-8'}));
+  a.download = '口試排程資料.csv'; a.click();
+}
+
+// Force push all local data to Google Sheet (for when Sheet is empty but browser has data)
+async function forceSyncToGas() {
+  if (!STATE.gasUrl) { toast('請先設定 Google Sheet URL', 'err'); return; }
+  const btn = document.getElementById('force-sync-btn');
+  btn.disabled = true; btn.textContent = '同步中...';
+  let count = 0;
+  try {
+    // Push all stuData
+    for (const [name, data] of Object.entries(STATE.stuData)) {
+      await gasCall('saveStuData', { name, payload: JSON.stringify(data) });
+      count++;
+    }
+    // Push all teacherAvail
+    for (const [teacher, data] of Object.entries(STATE.teacherAvail)) {
+      await gasCall('saveTeacherAvail', { teacher, payload: JSON.stringify(data) });
+    }
+    // Push editLog in one batch
+    if (STATE.editLog.length > 0) {
+      await gasCall('appendLog', { payload: JSON.stringify(STATE.editLog) });
+    }
+    toast(`✅ 已同步 ${count} 筆學生資料到 Google Sheet`, 'ok');
+  } catch(e) {
+    toast('同步失敗：' + e.message, 'err');
+  }
+  btn.disabled = false; btn.textContent = '☁️ 強制同步到 Google Sheet';
+}
+
+async function clearAllData() {
+  showConfirm('清除所有填寫資料','無法復原。', async () => {
+    await gasCall('clearAll'); STATE.stuData = {}; STATE.teacherAvail = {}; STATE.editLog = [];
+    saveLocal(); toast('已清除');
+  });
+}
+
+let _confirmCb = null;
+function showConfirm(title, msg, cb) {
+  document.getElementById('modal-title').textContent=title;
+  document.getElementById('modal-msg').textContent=msg;
+  _confirmCb=cb; document.getElementById('confirm-modal').classList.add('open');
+}
+function closeConfirm() { document.getElementById('confirm-modal').classList.remove('open'); }
+function doConfirm() { closeConfirm(); if(_confirmCb) _confirmCb(); }
+
+async function syncOnLoad() {
+  if (STATE.gasUrl) { await loadAllFromGas(); updateSyncStatus(); }
+}
+
+// ── Edit Log (Admin) ─────────────────────────────────
+async function loadEditLog() {
+  const r = await gasCall('getEditLog');
+  const log = Array.isArray(r?.data) ? r.data : STATE.editLog;
+  const tbody = document.getElementById('log-tbody');
+  const search = (document.getElementById('log-search')?.value || '').toLowerCase();
+  const actionFilter = document.getElementById('log-action-filter')?.value || 'all';
+
+  let filtered = log.slice().reverse(); // newest first
+  if (search) filtered = filtered.filter(e =>
+    (e.student||'').includes(search) || (e.teacher||'').includes(search)
+  );
+  if (actionFilter !== 'all') filtered = filtered.filter(e => e.action === actionFilter);
+
+  document.getElementById('log-count').textContent = filtered.length + ' 筆';
+
+  if (!filtered.length) {
+    tbody.innerHTML = '<tr><td colspan="5" class="text-muted" style="text-align:center;padding:16px">無紀錄</td></tr>';
+    return;
+  }
+  tbody.innerHTML = filtered.slice(0, 200).map(e => {
+    const ts = new Date(e.ts).toLocaleString('zh-TW', {month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});
+    const actionLabel = e.action === 'add'
+      ? '<span class="badge b-ok">新增</span>'
+      : '<span class="badge b-err">移除</span>';
+    const slots = (e.slots || []).map(s => {
+      const parts = s.split('_');
+      const date = parts[0]; const time = parts[1] || '';
+      const d = new Date(date);
+      return `${d.getMonth()+1}/${d.getDate()} ${time}`;
+    }).join('、');
+    return `<tr>
+      <td style="white-space:nowrap;font-size:.8rem;color:var(--muted)">${ts}</td>
+      <td><strong>${e.student || '—'}</strong></td>
+      <td>${e.teacher || '—'}</td>
+      <td>${actionLabel}</td>
+      <td style="font-size:.78rem;color:var(--muted)">${slots}</td>
+    </tr>`;
+  }).join('');
+}
+
+async function clearLog() {
+  showConfirm('清除所有編輯紀錄', '此操作無法復原。', async () => {
+    await gasCall('clearLog');
+    STATE.editLog = []; saveLocal();
+    toast('已清除編輯紀錄');
+    loadEditLog();
+  });
+}
+
+
+function filterCalTeacherList(q) {
+  document.querySelectorAll('#cal-teacher-list .cal-teacher-chip').forEach(chip => {
+    chip.style.display = chip.textContent.trim().includes(q) ? '' : 'none';
+  });
+  updateCalFilterSummary();
+}
+function updateCalFilterSummary() {
+  const el = document.getElementById('cal-filter-summary');
+  el.textContent = calFilterTeachers.size
+    ? `已選 ${calFilterTeachers.size} 位：${[...calFilterTeachers].join('、')}`
+    : '';
+}
+
+function exportLogCSV() {
+  let csv = '\uFEFF時間,學生,老師,動作,時段\n';
+  STATE.editLog.slice().reverse().forEach(e => {
+    const slots = (e.slots||[]).map(s => {
+      const [dk, t] = s.split('_'); const d = new Date(dk);
+      return `${d.getMonth()+1}/${d.getDate()} ${t}`;
+    }).join('|');
+    csv += `"${e.ts}","${e.student}","${e.teacher}","${e.action==='add'?'新增有空':'移除有空'}","${slots}"\n`;
+  });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
+  a.download = '編輯紀錄.csv'; a.click();
+}
+
+stateInit();
+initStudentPage();
+syncOnLoad().then(() => {
+  updateSyncStatus();
+  // If GAS URL is set, try to show Sheet link
+  if (STATE.gasUrl) {
+    // Extract spreadsheet id hint — user can open Sheet directly from their Drive
+    const wrap = document.getElementById('gas-sheet-link-wrap');
+    if (wrap) wrap.style.display = 'block';
+  }
+});
+</script>
+</body>
+</html>
