@@ -45,6 +45,8 @@
   --cal-avail-bg: #dce8fb;
   --cal-slot-bg: rgba(160,114,40,.07);
   --cal-slot-border: rgba(160,114,40,.25);
+  --tentative: #8a6200;
+  --tentative-bg: #fff2c2;
 }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -382,6 +384,35 @@ tbody tr:hover td { background: var(--paper); }
 .modal-box h3 { font-family: 'Noto Serif TC', serif; font-size: 1.1rem; margin-bottom: 12px; }
 .modal-footer { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
 
+
+/* ── PAGED DATE NAVIGATION & TENTATIVE SLOTS ───────── */
+.student-date-pager {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  margin: 8px 0 14px; padding: 8px 10px;
+  background: var(--paper); border: 1px solid var(--border); border-radius: 8px;
+}
+.tentative-date-section {
+  border: 1px solid var(--border); border-radius: 9px;
+  padding: 10px 12px; margin-bottom: 8px; background: var(--paper);
+}
+.tentative-slot-row { display:flex; gap:6px; flex-wrap:wrap; margin-top:7px; }
+.tentative-slot {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 5px 10px; border: 1.5px solid var(--border);
+  border-radius: 999px; cursor: pointer; font-size: .8rem;
+  color: var(--muted); background: #fff; transition: all .12s; user-select: none;
+}
+.tentative-slot:hover { border-color: var(--gold); color: var(--gold); }
+.tentative-slot.on { background: var(--tentative-bg); border-color: var(--tentative); color: var(--tentative); font-weight: 600; }
+.cal-event.tentative {
+  background: var(--tentative-bg); color: var(--tentative);
+  border-left: 3px solid var(--tentative);
+}
+.tentative-summary {
+  background: #fff8dc; border: 1px solid #ead18c; color: var(--tentative);
+  border-radius: 8px; padding: 7px 9px; margin-top: 8px; font-size: .8rem; line-height: 1.6;
+}
+
 /* ── MISC UTILS ─────────────────────────────────── */
 .divider { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
 .text-muted { color: var(--muted); font-size: .83rem; }
@@ -566,8 +597,23 @@ pre {
         <div id="teacher-selector-wrap" style="margin-bottom:16px"></div>
 
         <div class="card-title" style="font-size:.9rem;border-bottom:none;padding-bottom:0;margin-bottom:4px">各老師可用時段</div>
-        <p class="text-muted mb-3" style="font-size:.8rem">每格 30 分鐘，點擊切換有空／沒空。每天旁邊可一鍵選取該天。</p>
+        <p class="text-muted mb-2" style="font-size:.8rem">每格 30 分鐘，點擊切換有空／沒空。為避免頁面過長，每次只顯示 5 個平日。</p>
+        <div class="student-date-pager">
+          <button class="btn btn-xs btn-secondary" id="student-prev-page" onclick="changeStudentDatePage(-1)">← 前 5 天</button>
+          <span id="student-page-label" class="badge b-muted">—</span>
+          <button class="btn btn-xs btn-secondary" id="student-next-page" onclick="changeStudentDatePage(1)">後 5 天 →</button>
+        </div>
         <div id="avail-rows"></div>
+
+        <hr class="divider">
+        <div class="card-title" style="font-size:.9rem;border-bottom:none;padding-bottom:0;margin-bottom:4px">🟡 我可能安排在這個時段</div>
+        <p class="text-muted mb-2" style="font-size:.8rem">以每小時為單位勾選「正在喬、很可能想排」的時間。若某一天有勾選，至少要連續選擇 2 個小時；一場口試目前預計 2 小時，可選更長的可能時段範圍。</p>
+        <div id="tentative-slots"></div>
+        <div class="form-group mb-3 mt-2">
+          <label>可能安排備註</label>
+          <textarea id="tentative-note" rows="2" placeholder="例：目前傾向 7/8 下午 13:00–17:00；已問過 A 老師，還在等 B 老師確認"></textarea>
+        </div>
+
         <hr class="divider">
         <div class="form-group mb-3">
           <label>其他備註</label>
@@ -582,7 +628,7 @@ pre {
         <div class="form-row">
           <div class="form-group" style="max-width:200px">
             <label>確定日期</label>
-            <input type="date" id="conf-date" min="2026-06-22" max="2026-07-03">
+            <input type="date" id="conf-date" min="2026-06-22" max="2026-07-31">
           </div>
           <div class="form-group" style="max-width:150px">
             <label>開始時間</label>
@@ -590,7 +636,7 @@ pre {
           </div>
           <div class="form-group" style="max-width:150px">
             <label>結束時間</label>
-            <input type="time" id="conf-end" min="08:00" max="18:00" step="1800">
+            <input type="time" id="conf-end" min="08:00" max="19:00" step="1800">
           </div>
           <div class="form-group">
             <label>地點（選填）</label>
@@ -616,7 +662,7 @@ pre {
   <div class="page-header">
     <div>
       <div class="page-title">口試時間表</div>
-      <div class="page-sub">6/22（一）至 7/3（五）</div>
+      <div class="page-sub">6/22（一）至 7/31（五），每頁顯示兩週平日</div>
     </div>
     <button class="btn btn-secondary btn-sm" onclick="refreshFromGas('calendar', this)">🔄 重新整理</button>
   </div>
@@ -626,10 +672,17 @@ pre {
         <span style="font-size:.82rem;font-weight:600;color:var(--muted)">顯示：</span>
         <label style="display:flex;align-items:center;gap:5px;font-size:.82rem;cursor:pointer"><input type="radio" name="cal-view" value="both" checked onchange="renderCalendar()"> 全部</label>
         <label style="display:flex;align-items:center;gap:5px;font-size:.82rem;cursor:pointer"><input type="radio" name="cal-view" value="confirmed" onchange="renderCalendar()"> 已確定口試</label>
+        <label style="display:flex;align-items:center;gap:5px;font-size:.82rem;cursor:pointer"><input type="radio" name="cal-view" value="tentative" onchange="renderCalendar()"> 可能安排</label>
         <label style="display:flex;align-items:center;gap:5px;font-size:.82rem;cursor:pointer"><input type="radio" name="cal-view" value="avail" onchange="renderCalendar()"> 老師有空</label>
+      </div>
+      <div class="cal-page-nav" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-left:8px">
+        <button class="btn btn-xs btn-secondary" id="cal-prev-page" onclick="changeCalendarPage(-1)">← 上兩週</button>
+        <span id="cal-page-label" class="badge b-muted">—</span>
+        <button class="btn btn-xs btn-secondary" id="cal-next-page" onclick="changeCalendarPage(1)">下兩週 →</button>
       </div>
       <div class="cal-legend">
         <div class="legend-item"><div class="legend-dot" style="background:var(--cal-confirmed-bg);border:2px solid var(--cal-confirmed)"></div>已確定</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--tentative-bg);border:2px solid var(--tentative)"></div>可能安排</div>
         <div class="legend-item"><div class="legend-dot" style="background:var(--cal-avail-bg);border:2px solid var(--cal-avail)"></div>有空</div>
         <div class="legend-item"><div class="legend-dot" style="background:#fde8e8;border:2px solid var(--err)"></div>已佔用</div>
         <div class="legend-item"><div class="legend-dot" style="background:rgba(26,96,96,.15);border:1px solid var(--teal)"></div>全員有空</div>
@@ -928,28 +981,28 @@ const STUDENTS = [
   {name:"吳雨瑄",id:"P26134286",advisor:"顧嘉安",c1:"張學聖",c2:"李俊霖",c3:"鄭皓騰",c4:"",alt:["洪鴻智","吳杰穎","陳姿伶","徐逸祥"]},
 ];
 
-// Exam date range: 2026-06-22 (Mon) to 2026-07-03 (Fri), weekdays only
+// Exam date range: 2026-06-22 (Mon) to 2026-07-31 (Fri), weekdays only
 const EXAM_DATES = (() => {
   const dates = [];
   const start = new Date('2026-06-22');
-  const end   = new Date('2026-07-03');
+  const end   = new Date('2026-07-31');
   for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
     if (d.getDay() !== 0 && d.getDay() !== 6) dates.push(new Date(d));
   }
   return dates;
 })();
+const STUDENT_DAYS_PER_PAGE = 5;
+const CALENDAR_DAYS_PER_PAGE = 10;
 
-// Hours shown on calendar (8:00 – 18:00)
-const CAL_HOURS = [8,9,10,11,12,13,14,15,16,17];
+// Hours shown on calendar (8:00 – 19:00)
+const CAL_HOURS = [8,9,10,11,12,13,14,15,16,17,18];
 
-// The 5 fixed exam slots (for reference/coloring)
-const EXAM_SLOTS = [
-  {label:'09:00–10:30', start:9,  end:10.5},
-  {label:'10:30–12:00', start:10.5,end:12},
-  {label:'13:30–15:00', start:13.5,end:15},
-  {label:'15:00–16:30', start:15,  end:16.5},
-  {label:'16:30–18:00', start:16.5,end:18},
-];
+// Tentative scheduling intent uses one-hour blocks.
+// Users may select longer windows, but any selected run on a day must be at least 2 continuous hours.
+const TENTATIVE_HOUR_BLOCKS = Array.from({ length: 11 }, (_, i) => {
+  const start = 8 + i;
+  return { label: `${hToTime(start)}–${hToTime(start + 1)}`, start, end: start + 1 };
+});
 
 function dateKey(d) {
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
@@ -960,6 +1013,84 @@ function fmtDateShort(d) {
 }
 function fmtDateFull(d) {
   return `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`;
+}
+function hToTime(h) {
+  const hh = String(Math.floor(h)).padStart(2,'0');
+  const mm = (h % 1 === 0.5) ? '30' : '00';
+  return `${hh}:${mm}`;
+}
+function clampPage(page, pageSize) {
+  const pages = Math.max(1, Math.ceil(EXAM_DATES.length / pageSize));
+  return Math.max(0, Math.min(page, pages - 1));
+}
+function dateSlice(page, pageSize) {
+  const p = clampPage(page, pageSize);
+  return EXAM_DATES.slice(p * pageSize, p * pageSize + pageSize);
+}
+function fmtDateRange(dates) {
+  if (!dates || !dates.length) return '—';
+  return `${fmtDateShort(dates[0])} – ${fmtDateShort(dates[dates.length - 1])}`;
+}
+function makeTentativeKey(dk, slot) {
+  return `${dk}_${hToTime(slot.start)}-${hToTime(slot.end)}`;
+}
+function parseTentativeKey(key) {
+  const [date, rangeRaw] = String(key || '').split('_');
+  const range = (rangeRaw || '').replace('–', '-');
+  const [startTime, endTime] = range.split('-');
+  return { date, startTime: startTime || '', endTime: endTime || '' };
+}
+function formatTentativeKey(key) {
+  const p = parseTentativeKey(key);
+  if (!p.date || !p.startTime || !p.endTime) return key;
+  const d = new Date(p.date);
+  return `${fmtDateShort(d)} ${p.startTime}–${p.endTime}`;
+}
+function normalizeTentativeSlots(keys) {
+  const out = new Set();
+  (keys || []).forEach(key => {
+    const p = parseTentativeKey(key);
+    if (!p.date || !p.startTime || !p.endTime) return;
+    const start = Math.max(8, Math.floor(timeToH(p.startTime)));
+    const end = Math.min(19, Math.ceil(timeToH(p.endTime)));
+    for (let h = start; h < end; h++) {
+      if (h >= 8 && h + 1 <= 19) out.add(`${p.date}_${hToTime(h)}-${hToTime(h + 1)}`);
+    }
+  });
+  return [...out].sort();
+}
+function groupTentativeKeys(keys) {
+  const byDate = {};
+  normalizeTentativeSlots(keys).forEach(key => {
+    const p = parseTentativeKey(key);
+    const h = timeToH(p.startTime);
+    if (!byDate[p.date]) byDate[p.date] = [];
+    byDate[p.date].push(h);
+  });
+  const ranges = [];
+  Object.entries(byDate).forEach(([date, hours]) => {
+    const sorted = [...new Set(hours)].sort((a,b)=>a-b);
+    let start = null, prev = null;
+    sorted.forEach(h => {
+      if (start === null) { start = h; prev = h; return; }
+      if (h === prev + 1) { prev = h; return; }
+      ranges.push({ date, startTime: hToTime(start), endTime: hToTime(prev + 1), hours: prev - start + 1 });
+      start = h; prev = h;
+    });
+    if (start !== null) ranges.push({ date, startTime: hToTime(start), endTime: hToTime(prev + 1), hours: prev - start + 1 });
+  });
+  return ranges.sort((a,b)=>`${a.date}_${a.startTime}`.localeCompare(`${b.date}_${b.startTime}`));
+}
+function formatTentativeSlotsCompact(keys) {
+  const grouped = groupTentativeKeys(keys);
+  if (!grouped.length) return '';
+  return grouped.map(r => `${fmtDateShort(new Date(r.date))} ${r.startTime}–${r.endTime}`).join('、');
+}
+function validateTentativeSlots(keys) {
+  const bad = groupTentativeKeys(keys).filter(r => r.hours < 2);
+  if (!bad.length) return { ok: true };
+  const msg = bad.map(r => `${fmtDateShort(new Date(r.date))} ${r.startTime}–${r.endTime}`).join('、');
+  return { ok: false, msg: `以下可能安排時段不足連續 2 小時：${msg}` };
 }
 
 // ═══════════════════════════════════════════════════════
@@ -1569,6 +1700,10 @@ let currentStudent = '';
 let currentMode = 'pending';
 let calFilterTeachers = new Set(); // multi-select
 let calViewMode = 'both';
+let calendarPage = 0;
+let studentDatePage = 0;
+let studentAvailDraft = {};
+let studentTentativeDraft = new Set();
 let adminUnlocked = false;
 
 // ── Toast ────────────────────────────────────────────
@@ -1619,6 +1754,8 @@ function renderStudentForm() {
   const s = STATE.students.find(x => x.name === currentStudent);
   if (!s) return;
   const d = getStuData(currentStudent) || {};
+  studentDatePage = 0;
+  studentTentativeDraft = new Set(normalizeTentativeSlots(Array.isArray(d.tentativeSlots) ? d.tentativeSlots : []));
 
   // Committee info display — flat list of all possible teachers (no 口委1/2/3 labels)
   const allPossible = [s.advisor, s.c1, s.c2, s.c3, s.c4, ...(s.alt || [])].filter(Boolean);
@@ -1648,8 +1785,11 @@ function renderStudentForm() {
   // Build teacher selector for availability
   renderTeacherSelector(s, d);
 
-  // Note
+  // Pending notes and tentative scheduling intent
   document.getElementById('note-pending').value = d.notePending || '';
+  const tentativeNoteEl = document.getElementById('tentative-note');
+  if (tentativeNoteEl) tentativeNoteEl.value = d.tentativeNote || '';
+  renderTentativeSlots();
 
   // Confirmed fields
   if (d.confirmed) {
@@ -1685,6 +1825,12 @@ function renderTeacherSelector(student, savedData) {
   const savedSelected = savedData.selectedTeachers || defaultMembers;
   const selectedSet = new Set(savedSelected);
 
+  // Draft state preserves selections across the 5-day pages before the user presses Save.
+  studentAvailDraft = JSON.parse(JSON.stringify(savedData.availability || {}));
+  selectedSet.forEach(name => {
+    if (!studentAvailDraft[name]) studentAvailDraft[name] = { slots: [...getTeacherAvail(name)] };
+  });
+
   container.innerHTML = '';
   const wrap = document.createElement('div');
   wrap.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px';
@@ -1710,13 +1856,17 @@ function renderTeacherSelector(student, savedData) {
 
   container.appendChild(wrap);
   // Rebuild avail rows based on current selection
-  rebuildAvailRows(savedData.availability || {});
+  rebuildAvailRows(studentAvailDraft);
 }
 
 function onTeacherChipChange(checkbox) {
+  captureCurrentStudentPageDraft();
   checkbox.parentElement.classList.toggle('on', checkbox.checked);
-  const d = getStuData(currentStudent) || {};
-  rebuildAvailRows(d.availability || {});
+  if (checkbox.checked && !studentAvailDraft[checkbox.value]) {
+    studentAvailDraft[checkbox.value] = { slots: [...getTeacherAvail(checkbox.value)] };
+  }
+  rebuildAvailRows(studentAvailDraft);
+  renderTentativeSlots();
   // Update selectedTeachers in the DOM for saving
 }
 
@@ -1726,23 +1876,134 @@ function getSelectedTeachers() {
 }
 
 function rebuildAvailRows(savedAvail) {
+  studentAvailDraft = savedAvail || studentAvailDraft || {};
   const selected = getSelectedTeachers();
   const container = document.getElementById('avail-rows');
   container.innerHTML = '';
+  renderStudentDatePager();
   selected.forEach(teacher => {
-    const saved = savedAvail[teacher] || { slots: [] };
+    if (!studentAvailDraft[teacher]) studentAvailDraft[teacher] = { slots: [...getTeacherAvail(teacher)] };
+    const saved = studentAvailDraft[teacher] || { slots: [] };
     const savedSlots = new Set(saved.slots || []);
     const tInfo = STATE.teachers.find(t => t.name === teacher);
     container.appendChild(buildTeacherAvailBlock(teacher, tInfo?.dept || '', savedSlots));
   });
 }
 
+function getStudentPageDates() {
+  studentDatePage = clampPage(studentDatePage, STUDENT_DAYS_PER_PAGE);
+  return dateSlice(studentDatePage, STUDENT_DAYS_PER_PAGE);
+}
+
+function renderStudentDatePager() {
+  const dates = getStudentPageDates();
+  const pageCount = Math.max(1, Math.ceil(EXAM_DATES.length / STUDENT_DAYS_PER_PAGE));
+  const label = document.getElementById('student-page-label');
+  if (label) label.textContent = `第 ${studentDatePage + 1}/${pageCount} 頁：${fmtDateRange(dates)}`;
+  const prev = document.getElementById('student-prev-page');
+  const next = document.getElementById('student-next-page');
+  if (prev) prev.disabled = studentDatePage <= 0;
+  if (next) next.disabled = studentDatePage >= pageCount - 1;
+}
+
+function changeStudentDatePage(delta) {
+  captureCurrentStudentPageDraft();
+  studentDatePage = clampPage(studentDatePage + delta, STUDENT_DAYS_PER_PAGE);
+  rebuildAvailRows(studentAvailDraft);
+  renderTentativeSlots();
+}
+
+function visibleStudentDateKeys() {
+  return new Set(getStudentPageDates().map(dateKey));
+}
+
+function captureVisibleAvailabilityToDraft() {
+  const visibleKeys = visibleStudentDateKeys();
+  const selected = new Set(getSelectedTeachers());
+  selected.forEach(teacher => {
+    if (!studentAvailDraft[teacher]) studentAvailDraft[teacher] = { slots: [] };
+    const oldSlots = studentAvailDraft[teacher].slots || [];
+    studentAvailDraft[teacher].slots = oldSlots.filter(key => !visibleKeys.has(String(key).split('_')[0]));
+  });
+  document.querySelectorAll('.avail-blocks[data-teacher]').forEach(wrap => {
+    const teacher = wrap.dataset.teacher;
+    if (!selected.has(teacher)) return;
+    if (!studentAvailDraft[teacher]) studentAvailDraft[teacher] = { slots: [] };
+    wrap.querySelectorAll('.avail-block.on').forEach(b => {
+      if (!studentAvailDraft[teacher].slots.includes(b.dataset.key)) studentAvailDraft[teacher].slots.push(b.dataset.key);
+    });
+  });
+}
+
+function captureVisibleTentativeToDraft() {
+  const visibleKeys = visibleStudentDateKeys();
+  [...studentTentativeDraft].forEach(key => {
+    if (visibleKeys.has(String(key).split('_')[0])) studentTentativeDraft.delete(key);
+  });
+  document.querySelectorAll('#tentative-slots .tentative-slot.on').forEach(b => studentTentativeDraft.add(b.dataset.key));
+}
+
+function captureCurrentStudentPageDraft() {
+  captureVisibleAvailabilityToDraft();
+  captureVisibleTentativeToDraft();
+}
+
+function renderTentativeSlots() {
+  const container = document.getElementById('tentative-slots');
+  if (!container) return;
+  renderStudentDatePager();
+  const dates = getStudentPageDates();
+  container.innerHTML = '';
+  dates.forEach(date => {
+    const dk = dateKey(date);
+    const box = document.createElement('div');
+    box.className = 'tentative-date-section';
+
+    const header = document.createElement('div');
+    header.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap';
+    header.innerHTML = `
+      <div class="avail-date-label">🟡 ${fmtDateShort(date)}</div>
+      <button class="btn btn-xs btn-secondary" onclick="markTentativeDay('${dk}','all')">全天</button>
+      <button class="btn btn-xs btn-secondary" onclick="markTentativeDay('${dk}','am')">上午</button>
+      <button class="btn btn-xs btn-secondary" onclick="markTentativeDay('${dk}','noon')">中午</button>
+      <button class="btn btn-xs btn-secondary" onclick="markTentativeDay('${dk}','pm')">下午</button>
+      <button class="btn btn-xs btn-secondary" onclick="markTentativeDay('${dk}','eve')">傍晚</button>
+      <button class="btn btn-xs btn-secondary" onclick="markTentativeDay('${dk}','none')">清空</button>`;
+
+    const row = document.createElement('div');
+    row.className = 'tentative-slot-row';
+    TENTATIVE_HOUR_BLOCKS.forEach(slot => {
+      const key = makeTentativeKey(dk, slot);
+      const btn = document.createElement('div');
+      btn.className = 'tentative-slot' + (studentTentativeDraft.has(key) ? ' on' : '');
+      btn.dataset.key = key;
+      btn.dataset.hour = String(slot.start);
+      btn.textContent = slot.label;
+      btn.title = '點擊切換此 1 小時可能安排區段';
+      btn.onclick = () => btn.classList.toggle('on');
+      row.appendChild(btn);
+    });
+    box.appendChild(header);
+    box.appendChild(row);
+    container.appendChild(box);
+  });
+}
+
+function markTentativeDay(dk, period) {
+  document.querySelectorAll(`#tentative-slots .tentative-slot[data-key^="${dk}_"]`).forEach(b => {
+    const h = Number(b.dataset.hour);
+    const on =
+      period === 'all' ||
+      (period === 'am'   && h >= 8  && h < 12) ||
+      (period === 'noon' && h >= 12 && h < 13) ||
+      (period === 'pm'   && h >= 13 && h < 17) ||
+      (period === 'eve'  && h >= 17 && h < 19);
+    if (period === 'none') b.classList.remove('on');
+    else b.classList.toggle('on', on);
+  });
+}
+
 function buildTeacherAvailBlock(teacher, dept, savedSlots) {
-  // If student has no local save for this teacher, use shared avail as default
-  if (savedSlots.size === 0) {
-    const shared = getTeacherAvail(teacher);
-    shared.forEach(s => savedSlots.add(s));
-  }
   const section = document.createElement('div');
   section.className = 'card';
   section.style.cssText = 'padding:16px 20px;margin-bottom:10px;background:var(--paper)';
@@ -1753,7 +2014,7 @@ function buildTeacherAvailBlock(teacher, dept, savedSlots) {
   hdr.innerHTML = `<span class="badge b-muted">${dept}</span> <strong>${teacher}</strong>`;
   section.appendChild(hdr);
 
-  EXAM_DATES.forEach(date => {
+  getStudentPageDates().forEach(date => {
     const dk = dateKey(date);
     const dateDiv = document.createElement('div');
     dateDiv.className = 'avail-section';
@@ -1821,16 +2082,20 @@ function markDay(teacher, dk, period) {
 }
 
 function collectAvailability() {
+  captureVisibleAvailabilityToDraft();
+  const selected = new Set(getSelectedTeachers());
   const result = {};
-  document.querySelectorAll('.avail-blocks[data-teacher]').forEach(wrap => {
-    const teacher = wrap.dataset.teacher;
-    if (!result[teacher]) result[teacher] = { slots: [] };
-    wrap.querySelectorAll('.avail-block.on').forEach(b => {
-      if (!result[teacher].slots.includes(b.dataset.key))
-        result[teacher].slots.push(b.dataset.key);
-    });
+  Object.entries(studentAvailDraft || {}).forEach(([teacher, data]) => {
+    if (!selected.has(teacher)) return;
+    const slots = [...new Set(data.slots || [])].sort();
+    result[teacher] = { slots };
   });
   return result;
+}
+
+function collectTentativeSlots() {
+  captureVisibleTentativeToDraft();
+  return normalizeTentativeSlots([...studentTentativeDraft]);
 }
 
 // ── Confirmed Committee Checkboxes ──────────────────────────────────
@@ -1866,12 +2131,21 @@ function getConfirmedCommittee() {
 
 async function savePending() {
   if (!currentStudent) { toast('請先選擇姓名', 'err'); return; }
+  captureCurrentStudentPageDraft();
   const avail = collectAvailability();
+  const tentativeSlots = collectTentativeSlots();
+  const tentativeCheck = validateTentativeSlots(tentativeSlots);
+  if (!tentativeCheck.ok) {
+    toast(tentativeCheck.msg, 'err');
+    return;
+  }
   const data = {
     mode: 'pending',
     advisorAttend: document.getElementById('adv-attend-chk').checked,
     selectedTeachers: getSelectedTeachers(),
     availability: avail,
+    tentativeSlots,
+    tentativeNote: document.getElementById('tentative-note')?.value || '',
     notePending: document.getElementById('note-pending').value,
   };
 
@@ -1979,18 +2253,42 @@ function clearCalTeachers() {
   renderCalendar();
 }
 
+function getCalendarPageDates() {
+  calendarPage = clampPage(calendarPage, CALENDAR_DAYS_PER_PAGE);
+  return dateSlice(calendarPage, CALENDAR_DAYS_PER_PAGE);
+}
+
+function renderCalendarPager() {
+  const dates = getCalendarPageDates();
+  const pageCount = Math.max(1, Math.ceil(EXAM_DATES.length / CALENDAR_DAYS_PER_PAGE));
+  const label = document.getElementById('cal-page-label');
+  if (label) label.textContent = `第 ${calendarPage + 1}/${pageCount} 頁：${fmtDateRange(dates)}`;
+  const prev = document.getElementById('cal-prev-page');
+  const next = document.getElementById('cal-next-page');
+  if (prev) prev.disabled = calendarPage <= 0;
+  if (next) next.disabled = calendarPage >= pageCount - 1;
+}
+
+function changeCalendarPage(delta) {
+  calendarPage = clampPage(calendarPage + delta, CALENDAR_DAYS_PER_PAGE);
+  renderCalendar();
+}
+
 function renderCalendar() {
   calViewMode = document.querySelector('input[name="cal-view"]:checked')?.value || 'both';
+  renderCalendarPager();
+  updateCalFilterSummary();
 
+  const visibleDates = getCalendarPageDates();
   const gridEl = document.getElementById('cal-grid');
-  gridEl.style.gridTemplateColumns = `64px repeat(${EXAM_DATES.length}, 1fr)`;
+  gridEl.style.gridTemplateColumns = `64px repeat(${visibleDates.length}, 1fr)`;
   gridEl.innerHTML = '';
 
   // ── Build data lookups ─────────────────────────────
-  // confirmed events: {dk: [{student, startTime, endTime, location, committeePresent}]}
-  const confirmedByDate = {};
-  // avail: {dk_HH:MM: Set<teacherName>}
-  const availBySlot = {};
+  const confirmedByDate = {}; // {dk: [{student, startTime, endTime, location, committeePresent}]}
+  const tentativeByDate = {}; // {dk: [{student, startTime, endTime, note, teachers}]}
+  const availBySlot = {};     // {dk_HH:MM: Set<teacherName>}
+  const occupiedBySlot = {};  // {dk_HH:MM: Set<teacherName>}
 
   STATE.students.forEach(s => {
     const d = STATE.stuData[s.name];
@@ -2008,6 +2306,20 @@ function renderCalendar() {
       });
     }
 
+    if (d.mode === 'pending' && Array.isArray(d.tentativeSlots)) {
+      groupTentativeKeys(d.tentativeSlots).forEach(t => {
+        if (!t.date || !t.startTime || !t.endTime) return;
+        if (!tentativeByDate[t.date]) tentativeByDate[t.date] = [];
+        tentativeByDate[t.date].push({
+          student: s.name,
+          startTime: t.startTime,
+          endTime: t.endTime,
+          note: d.tentativeNote || '',
+          teachers: d.selectedTeachers || getCommittee(s, d),
+        });
+      });
+    }
+
     if (d.availability) {
       Object.entries(d.availability).forEach(([teacher, avData]) => {
         (avData.slots || []).forEach(key => {
@@ -2016,40 +2328,17 @@ function renderCalendar() {
         });
       });
     }
-    // Also mark committeePresent teachers as occupied on confirmed slots
+
     if (d.mode === 'confirmed' && d.confirmed && d.confirmed.committeePresent) {
+      const cp = d.confirmed.committeePresent || [];
       const dk = d.confirmed.date;
       const startH = timeToH(d.confirmed.startTime);
       const endH   = timeToH(d.confirmed.endTime);
-      // Generate 30-min slots covered
       for (let h = Math.floor(startH * 2) / 2; h < endH; h += 0.5) {
-        const hh = String(Math.floor(h)).padStart(2,'0');
-        const mm = (h % 1 === 0.5) ? '30' : '00';
-        const key = `${dk}_${hh}:${mm}`;
-        d.confirmed.committeePresent.forEach(teacher => {
-          if (!availBySlot[key]) availBySlot[key] = new Set();
-          // mark as "occupied" differently — we store separately
-        });
+        const key = `${dk}_${hToTime(h)}`;
+        if (!occupiedBySlot[key]) occupiedBySlot[key] = new Set();
+        cp.forEach(t => occupiedBySlot[key].add(t));
       }
-    }
-  });
-
-  // Occupied slots from confirmed committees
-  const occupiedBySlot = {}; // {dk_HH:MM: Set<teacherName>}
-  STATE.students.forEach(s => {
-    const d = STATE.stuData[s.name];
-    if (d?.mode !== 'confirmed' || !d.confirmed) return;
-    const cp = d.confirmed.committeePresent || [];
-    if (!cp.length) return;
-    const dk = d.confirmed.date;
-    const startH = timeToH(d.confirmed.startTime);
-    const endH   = timeToH(d.confirmed.endTime);
-    for (let h = Math.floor(startH * 2) / 2; h < endH; h += 0.5) {
-      const hh = String(Math.floor(h)).padStart(2,'0');
-      const mm = (h % 1 === 0.5) ? '30' : '00';
-      const key = `${dk}_${hh}:${mm}`;
-      if (!occupiedBySlot[key]) occupiedBySlot[key] = new Set();
-      cp.forEach(t => occupiedBySlot[key].add(t));
     }
   });
 
@@ -2061,7 +2350,7 @@ function renderCalendar() {
   gridEl.appendChild(corner);
 
   const DAYS = ['日','一','二','三','四','五','六'];
-  EXAM_DATES.forEach(date => {
+  visibleDates.forEach(date => {
     const dh = document.createElement('div');
     dh.className = 'cal-date-header';
     dh.innerHTML = `${date.getMonth()+1}/${date.getDate()}<br><span class="dow">週${DAYS[date.getDay()]}</span>`;
@@ -2075,12 +2364,11 @@ function renderCalendar() {
     tc.textContent = `${String(hour).padStart(2,'0')}:00`;
     gridEl.appendChild(tc);
 
-    EXAM_DATES.forEach(date => {
+    visibleDates.forEach(date => {
       const dk = dateKey(date);
       const cell = document.createElement('div');
       cell.className = 'cal-slot';
 
-      // Exam windows background
       if ([9,10,13,14,15,16].includes(hour)) cell.classList.add('exam-window');
       if (hour === 12) cell.classList.add('lunch-break');
 
@@ -2089,12 +2377,32 @@ function renderCalendar() {
         (confirmedByDate[dk] || []).forEach(ev => {
           const startH = timeToH(ev.startTime);
           const endH   = timeToH(ev.endTime);
-          if (startH <= hour && hour < endH) {
+          const startRow = Math.floor(startH);
+          if (startRow <= hour && hour < endH) {
             const ev_el = document.createElement('div');
             ev_el.className = 'cal-event confirmed';
             ev_el.title = `${ev.student} ${ev.startTime}–${ev.endTime}${ev.location ? ' @ ' + ev.location : ''}\n出席：${ev.committeePresent.join('、')}`;
-            ev_el.textContent = startH === hour
+            ev_el.textContent = hour === startRow
               ? `🎓 ${ev.student} ${ev.startTime}–${ev.endTime}`
+              : `↕ ${ev.student}`;
+            cell.appendChild(ev_el);
+          }
+        });
+      }
+
+      // ── Tentative scheduling intent ─────────────────
+      if (calViewMode === 'tentative' || calViewMode === 'both') {
+        (tentativeByDate[dk] || []).forEach(ev => {
+          if (selectedTeachers.length && !(ev.teachers || []).some(t => selectedTeachers.includes(t))) return;
+          const startH = timeToH(ev.startTime);
+          const endH   = timeToH(ev.endTime);
+          const startRow = Math.floor(startH);
+          if (startRow <= hour && hour < endH) {
+            const ev_el = document.createElement('div');
+            ev_el.className = 'cal-event tentative';
+            ev_el.title = `${ev.student} 想安排 ${ev.startTime}–${ev.endTime}${ev.note ? '\n備註：' + ev.note : ''}${ev.teachers?.length ? '\n相關老師：' + ev.teachers.join('、') : ''}`;
+            ev_el.textContent = hour === startRow
+              ? `🟡 ${ev.student} ${ev.startTime}–${ev.endTime}`
               : `↕ ${ev.student}`;
             cell.appendChild(ev_el);
           }
@@ -2109,7 +2417,6 @@ function renderCalendar() {
         ];
 
         if (selectedTeachers.length > 0) {
-          // Show each selected teacher's status in this cell
           selectedTeachers.forEach(teacher => {
             const isAvail    = slots30.some(k => availBySlot[k]?.has(teacher));
             const isOccupied = slots30.some(k => occupiedBySlot[k]?.has(teacher));
@@ -2126,7 +2433,6 @@ function renderCalendar() {
             }
           });
 
-          // Highlight cell if ALL selected teachers are available (and none occupied)
           const allAvail = selectedTeachers.every(t =>
             slots30.some(k => availBySlot[k]?.has(t)) &&
             !slots30.some(k => occupiedBySlot[k]?.has(t))
@@ -2135,7 +2441,6 @@ function renderCalendar() {
             cell.classList.add('all-avail');
           }
         } else {
-          // No filter: show count
           const teachers = new Set();
           slots30.forEach(k => (availBySlot[k] || new Set()).forEach(t => teachers.add(t)));
           if (teachers.size > 0) {
@@ -2279,6 +2584,11 @@ function renderOverview() {
           ${count>0 ? `<span class="text-muted" style="font-size:.78rem">（${count} 個時段）</span>` : ''}
         </div>`;
       });
+      const tentativeSlots = Array.isArray(d.tentativeSlots) ? d.tentativeSlots : [];
+      if (tentativeSlots.length) {
+        const preview = formatTentativeSlotsCompact(tentativeSlots);
+        bodyHtml += `<div class="tentative-summary">🟡 可能安排：${preview}${d.tentativeNote ? `<br>備註：${d.tentativeNote}` : ''}</div>`;
+      }
       if (d.notePending) bodyHtml += `<div class="text-muted mt-2" style="font-size:.8rem">📝 ${d.notePending}</div>`;
     } else {
       bodyHtml += `<div class="text-muted">尚未填寫</div>`;
@@ -2512,14 +2822,15 @@ async function admDeleteTeacher(name) {
 
 function exportCSV() {
   // Header
-  let csv = '\uFEFF學生,學號,指導教授,指導教授出席,所有可能口委,狀態,確定日期,開始,結束,地點,出席口委,備註\n';
+  let csv = '\uFEFF學生,學號,指導教授,指導教授出席,所有可能口委,狀態,可能安排時段,可能安排備註,確定日期,開始,結束,地點,出席口委,備註\n';
   STATE.students.forEach(s => {
     const d = STATE.stuData[s.name] || {}, c = d.confirmed || {};
     // All possible teachers (advisor + c1-c4 + alt), deduped
     const seen = new Set();
     const allPossible = [s.advisor, s.c1, s.c2, s.c3, s.c4, ...(s.alt||[])]
       .filter(Boolean).filter(n => seen.has(n) ? false : seen.add(n));
-    csv += `"${s.name}","${s.id||''}","${s.advisor||''}","${d.advisorAttend?'是':'否'}","${allPossible.join('|')}","${d.mode||'未填'}","${c.date||''}","${c.startTime||''}","${c.endTime||''}","${c.location||''}","${(c.committeePresent||[]).join('|')}","${c.note||''}"\n`;
+    const tentative = formatTentativeSlotsCompact(d.tentativeSlots || []);
+    csv += `"${s.name}","${s.id||''}","${s.advisor||''}","${d.advisorAttend?'是':'否'}","${allPossible.join('|')}","${d.mode||'未填'}","${tentative}","${d.tentativeNote||''}","${c.date||''}","${c.startTime||''}","${c.endTime||''}","${c.location||''}","${(c.committeePresent||[]).join('|')}","${c.note||''}"\n`;
   });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([csv], {type:'text/csv;charset=utf-8'}));
